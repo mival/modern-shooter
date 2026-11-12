@@ -52,6 +52,11 @@ The menu has the bot setup for the offline mode:
 
 During an offline game, press Esc, change the setup, and select "Apply bot setup".
 
+## Graphics quality
+
+The "Graphics" option in the menu limits the render resolution. The default is "Medium" (approximately 1080p).
+On a 4K screen with an integrated GPU, "Native resolution" can decrease the frame rate below 60.
+
 ## Dedicated server
 
 ```sh
@@ -120,7 +125,7 @@ npm test         # Simulation tests.
 ```
 
 Useful URL parameters: `?offline` starts an offline game, `?connect=ws://host:27960` connects to a server,
-`?bloom=0` sets the glow effect to off.
+`?quality=low` (or `medium`, `high`, `native`) sets the graphics quality.
 
 ## Structure
 

@@ -13,6 +13,14 @@ const SURFACE = {
   plat: [0x3f6a80, 0x35d0ff], walk: [0x3f6a80, 0x35d0ff], ped: [0x6a4a90, 0xd45cff],
   pillar: [0x8a6844, 0xffa040], cover: [0x5c6c90, 0x7fa0ff], crate: [0x86764c, 0xffd060],
 };
+// Graphics quality. "pixels" is the maximum number of pixels that the game draws.
+// A 4K screen has 8 million pixels. That is too much for an integrated GPU.
+export const QUALITY = {
+  low: { pixels: 1.3e6, bloom: false },
+  medium: { pixels: 2.2e6, bloom: true },
+  high: { pixels: 4.2e6, bloom: true },
+  native: { pixels: Infinity, bloom: true },
+};
 const UP = new THREE.Vector3(0, 1, 0);
 const tr = newTrace();
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3();
@@ -66,7 +74,6 @@ export class Renderer {
   constructor(canvas, map, world, opts = {}) {
     this.map = map; this.world = world;
     this.r = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.r.toneMapping = THREE.ACESFilmicToneMapping;
     this.r.toneMappingExposure = 1.3;
     this.scene = new THREE.Scene();
@@ -87,23 +94,49 @@ export class Renderer {
     this.buildItems();
     this.buildViewModel();
 
-    this.composer = null;
-    if (opts.bloom !== false) {
-      this.composer = new EffectComposer(this.r);
-      this.composer.addPass(new RenderPass(this.scene, this.camera));
-      this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.5, 0.8));
-      this.composer.addPass(new OutputPass());
-    }
+    this.quality = QUALITY[opts.quality] || QUALITY.medium;
+    this.composer = new EffectComposer(this.r);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.5, 0.8));
+    this.composer.addPass(new OutputPass());
     this.sphere = new THREE.SphereGeometry(1, 16, 12);
     this.beamGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
+    this.puffPool = []; this.beamPool = [];
+    this.projectileMats = WEAPONS.map((w, i) => new THREE.MeshBasicMaterial({ color: i === 2 ? 0xffb060 : w.color }));
+    this.warm();
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
 
+  // Makes one object of each type and compiles all shaders before the game starts.
+  warm() {
+    const p = { id: -1, x: 0, y: 300, z: 0, yaw: 0, pitch: 0, dead: false, beam: true, amp: true };
+    this.setPlayers([p], 0);
+    this.setProjectiles([{ id: -1, w: 2, x: 0, y: 300, z: 0 }]);
+    this.puff(0, 300, 0, 0xffffff, 1, 1);
+    this.beamEffect({ x: 0, y: 300, z: 0 }, [0, 310, 0], 0xffffff, 1, 1);
+    this.view.visible = true;
+    this.setViewWeapon(0);
+    this.r.compile(this.scene, this.camera);
+    this.setPlayers([], 0);
+    this.setProjectiles([]);
+    for (const e of this.effects) { e.obj.visible = false; e.pool.push(e.obj); }
+    this.effects.length = 0;
+  }
+
+  setQuality(name) {
+    this.quality = QUALITY[name] || QUALITY.medium;
+    this.resize();
+  }
+
   resize() {
     const w = window.innerWidth, h = window.innerHeight;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const ratio = Math.min(dpr, Math.sqrt(this.quality.pixels / (w * h)));
+    this.r.setPixelRatio(ratio);
     this.r.setSize(w, h, false);
-    if (this.composer) this.composer.setSize(w, h);
+    this.composer.setPixelRatio(ratio);
+    this.composer.setSize(w, h);
     this.camera.aspect = w / h;
     this.setFov(this.fov || 100);
   }
@@ -357,8 +390,7 @@ export class Renderer {
       seen.add(q.id);
       let m = this.projectiles.get(q.id);
       if (!m) {
-        const c = WEAPONS[q.w].color;
-        m = new THREE.Mesh(this.sphere, new THREE.MeshBasicMaterial({ color: q.w === 2 ? 0xffb060 : c }));
+        m = new THREE.Mesh(this.sphere, this.projectileMats[q.w]);
         m.scale.setScalar(q.w === 2 ? 5 : 4);
         this.scene.add(m);
         this.projectiles.set(q.id, m);
@@ -373,15 +405,26 @@ export class Renderer {
     for (let i = 0; i < this.items.length; i++) this.items[i].visible = avail[i] === '1';
   }
 
-  addEffect(obj, life, fn) {
-    this.scene.add(obj);
-    this.effects.push({ obj, life, age: 0, fn });
+  // Effects use again their meshes and materials.
+  // A new material for each effect makes the GPU compile the shader again, and the game stops for a moment.
+  effectMesh(pool, geometry, side) {
+    const m = pool.pop() || new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side }));
+    m.visible = true;
+    return m;
+  }
+
+  addEffect(obj, pool, life, fn) {
+    if (!obj.parent) this.scene.add(obj);
+    fn(0);
+    this.effects.push({ obj, pool, life, age: 0, fn });
   }
 
   puff(x, y, z, color, size, life, opacity = 0.9, grow = 2) {
-    const m = new THREE.Mesh(this.sphere, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false }));
+    if (this.effects.length > 400) return;
+    const m = this.effectMesh(this.puffPool, this.sphere, THREE.FrontSide);
+    m.material.color.set(color);
     m.position.set(x, y, z);
-    this.addEffect(m, life, (k) => { m.scale.setScalar(size * (1 + k * grow)); m.material.opacity = opacity * (1 - k); });
+    this.addEffect(m, this.puffPool, life, (k) => { m.scale.setScalar(size * (1 + k * grow)); m.material.opacity = opacity * (1 - k); });
   }
 
   explosion(p, weapon) {
@@ -400,12 +443,13 @@ export class Renderer {
   }
 
   beamEffect(a, b, color, width, life) {
-    const m = new THREE.Mesh(this.beamGeo, new THREE.MeshBasicMaterial({ color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    const m = this.effectMesh(this.beamPool, this.beamGeo, THREE.DoubleSide);
+    m.material.color.set(color);
     v2.set(b[0] - a.x, b[1] - a.y, b[2] - a.z);
     const len = v2.length();
     m.position.set(a.x + v2.x / 2, a.y + v2.y / 2, a.z + v2.z / 2);
     m.quaternion.setFromUnitVectors(UP, v2.normalize());
-    this.addEffect(m, life, (k) => { m.scale.set(width * (1 - k * 0.7), len, width * (1 - k * 0.7)); m.material.opacity = 1 - k; });
+    this.addEffect(m, this.beamPool, life, (k) => { m.scale.set(width * (1 - k * 0.7), len, width * (1 - k * 0.7)); m.material.opacity = 1 - k; });
   }
 
   // Draws the effect of a shot from the point "a" to each end point in "ends".
@@ -446,8 +490,8 @@ export class Renderer {
       const e = this.effects[i];
       e.age += dt;
       if (e.age >= e.life) {
-        this.scene.remove(e.obj);
-        e.obj.material.dispose();
+        e.obj.visible = false;
+        e.pool.push(e.obj);
         this.effects.splice(i, 1);
       } else e.fn(e.age / e.life);
     }
@@ -463,7 +507,7 @@ export class Renderer {
       this.viewFlash.material.opacity = this.kick > 0.6 ? 0.9 : 0;
       this.viewFlash.scale.setScalar(2 + this.kick * 2);
     }
-    if (this.composer) this.composer.render(dt);
+    if (this.quality.bloom) this.composer.render(dt);
     else this.r.render(this.scene, this.camera);
   }
 }

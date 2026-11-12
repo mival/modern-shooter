@@ -14,11 +14,11 @@ const params = new URLSearchParams(location.search);
 const map = buildMap();
 const world = makeWorld(map);
 const canvas = $('view');
-const renderer = new Renderer(canvas, map, world, { bloom: params.get('bloom') !== '0' });
+const renderer = new Renderer(canvas, map, world);
 const input = new Input(canvas);
 
 // ---------- Settings ----------
-const settings = { name: 'Player', botsOn: true, botCount: 4, botSkill: 3, fragLimit: 20, timeLimit: 10, address: '', sens: 2.2, fov: 100, volume: 0.5 };
+const settings = { name: 'Player', botsOn: true, botCount: 4, botSkill: 3, fragLimit: 20, timeLimit: 10, address: '', sens: 2.2, fov: 100, volume: 0.5, quality: 'medium' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('slipstream') || '{}')); } catch { /* Storage is not available. */ }
 function saveSettings() {
   try { localStorage.setItem('slipstream', JSON.stringify(settings)); } catch { /* Storage is not available. */ }
@@ -32,6 +32,7 @@ function bindSettings() {
   const apply = () => {
     input.sens = settings.sens;
     renderer.setFov(settings.fov);
+    renderer.setQuality(params.get('quality') || settings.quality);
     setVolume(settings.volume);
     $('botskillv').textContent = settings.botSkill;
     $('sensv').textContent = settings.sens.toFixed(1);
@@ -47,6 +48,8 @@ function bindSettings() {
     $(id).value = settings[key];
     $(id).addEventListener('input', () => { settings[key] = num($(id).value, lo, hi, settings[key]); saveSettings(); apply(); });
   }
+  $('quality').value = settings.quality;
+  $('quality').addEventListener('change', () => { settings.quality = $('quality').value; saveSettings(); apply(); });
   $('botson').checked = settings.botsOn;
   $('botson').addEventListener('change', () => { settings.botsOn = $('botson').checked; saveSettings(); apply(); });
   apply();
