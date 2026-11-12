@@ -1,0 +1,21 @@
+{
+  "name": "slipstream-arena",
+  "version": "0.1.0",
+  "description": "An original arena shooter with fast movement, a browser client, and a dedicated server.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "server": "node server/index.js",
+    "start": "vite build && node server/index.js",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "three": "^0.187.0",
+    "vite": "^8.3.8"
+  }
+}

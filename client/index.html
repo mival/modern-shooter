@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Slipstream Arena</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230a0d16'/%3E%3Cpath d='M3 11 8 3l5 8H9.5L8 8.5 6.5 11z' fill='%2335ffd0'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./src/style.css">
+</head>
+<body>
+  <canvas id="view"></canvas>
+
+  <div id="hud" hidden>
+    <div id="flash"></div>
+    <div id="crosshair"></div>
+    <div id="top"><span id="clock">0:00</span><span id="lead"></span></div>
+    <div id="feed"></div>
+    <div id="center"></div>
+    <div id="pickup"></div>
+    <div id="chatlog"></div>
+    <input id="chatinput" maxlength="120" placeholder="Message, then Enter" autocomplete="off" hidden>
+    <div id="bottom">
+      <div class="stat" id="health"><b>100</b><i>Health</i></div>
+      <div class="stat" id="armor"><b>0</b><i>Armor</i></div>
+      <div id="weapons"></div>
+      <div class="stat" id="ammo"><b>0</b><i>Ammo</i></div>
+    </div>
+    <div id="amp" hidden></div>
+    <div id="net"></div>
+    <div id="scores" hidden>
+      <h2 id="scoretitle">Scores</h2>
+      <table>
+        <thead><tr><th>Player</th><th>Frags</th><th>Deaths</th><th>Ping</th></tr></thead>
+        <tbody id="scorerows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="menu">
+    <div class="panel">
+      <h1>Slipstream <span>Arena</span></h1>
+      <p class="tag">Fast arena deathmatch. Strafe, jump, rocket, repeat.</p>
+
+      <div id="ingame" hidden>
+        <button id="resume" class="primary">Resume</button>
+        <button id="leave">Leave game</button>
+      </div>
+
+      <label class="row">Name <input id="name" maxlength="16" autocomplete="off"></label>
+
+      <fieldset>
+        <legend>Offline</legend>
+        <label class="row check"><input id="botson" type="checkbox"> Bots</label>
+        <label class="row">Bot count <input id="botcount" type="number" min="1" max="15"></label>
+        <label class="row">Bot skill <input id="botskill" type="range" min="1" max="5" step="1"><output id="botskillv"></output></label>
+        <label class="row">Frag limit <input id="fraglimit" type="number" min="0" max="1000"></label>
+        <label class="row">Time limit (min) <input id="timelimit" type="number" min="0" max="600"></label>
+        <button id="offline" class="primary">Play offline</button>
+        <button id="applybots" hidden>Apply bot setup</button>
+      </fieldset>
+
+      <fieldset>
+        <legend>Online</legend>
+        <label class="row">Server <input id="address" placeholder="ws://host:27960" autocomplete="off"></label>
+        <p id="serverinfo" class="note"></p>
+        <button id="connect" class="primary">Connect</button>
+      </fieldset>
+
+      <fieldset>
+        <legend>Options</legend>
+        <label class="row">Mouse speed <input id="sens" type="range" min="0.3" max="6" step="0.1"><output id="sensv"></output></label>
+        <label class="row">Field of view <input id="fov" type="range" min="80" max="130" step="1"><output id="fovv"></output></label>
+        <label class="row">Volume <input id="volume" type="range" min="0" max="1" step="0.05"><output id="volumev"></output></label>
+      </fieldset>
+
+      <p id="status" class="note"></p>
+      <p class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Space</kbd> jump · <kbd>Mouse</kbd> aim and fire · <kbd>1</kbd>–<kbd>6</kbd> or wheel: weapon · <kbd>Tab</kbd> scores · <kbd>Enter</kbd> chat · <kbd>Esc</kbd> menu</p>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

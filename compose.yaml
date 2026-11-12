@@ -1,0 +1,17 @@
+services:
+  arena:
+    build: .
+    image: slipstream-arena
+    restart: unless-stopped
+    ports:
+      - "27960:27960"
+    environment:
+      SERVER_NAME: "Slipstream Arena server"
+      MAX_CLIENTS: "12"
+      # BOTS is the number of bots. "0" sets the bots to off.
+      BOTS: "4"
+      BOT_SKILL: "3"
+      # "on": a bot leaves when a player joins. "off": the bot count is constant.
+      BOT_FILL: "on"
+      FRAG_LIMIT: "20"
+      TIME_LIMIT: "10"
