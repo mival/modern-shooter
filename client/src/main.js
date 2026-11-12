@@ -462,6 +462,8 @@ fetch('status').then((r) => (r.ok ? r.json() : null)).then((s) => {
   $('serverinfo').textContent = `${s.name}: ${s.players}/${s.maxClients} players, ${s.bots} bots, map ${s.map}`;
 }).catch(() => {});
 
+// The "debug" parameter gives test scripts access to the input and the renderer.
+if (params.has('debug')) window.game = { input, renderer };
 if (params.has('offline')) startOffline();
 else if (params.has('connect')) startOnline(params.get('connect'));
 requestAnimationFrame(frame);

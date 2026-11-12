@@ -11,6 +11,15 @@ It uses the gameplay rules of the classic arena shooters of 1999:
 The client uses [three.js](https://threejs.org/) (WebGL). The dedicated server uses Node.js and WebSocket.
 The client and the server use the same simulation code in `shared/`.
 
+## Screenshots
+
+![A fight on the ground level](docs/screenshots/combat.png)
+
+| | |
+| --- | --- |
+| ![The arena from the top level](docs/screenshots/arena.png) | ![The stairs to a corner platform](docs/screenshots/stairs.png) |
+| ![The scores](docs/screenshots/scores.png) | ![The menu](docs/screenshots/menu.png) |
+
 ## Requirements
 
 - Node.js 22 or later.
@@ -126,6 +135,7 @@ npm test         # Simulation tests.
 
 Useful URL parameters: `?offline` starts an offline game, `?connect=ws://host:27960` connects to a server,
 `?quality=low` (or `medium`, `high`, `native`) sets the graphics quality.
+`?debug` gives test scripts access to the input and the renderer as `window.game`.
 
 ## Structure
 
