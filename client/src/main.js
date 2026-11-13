@@ -156,7 +156,10 @@ function onMessage(m) {
     updateScores();
   } else if (m.t === 'chat') addChat(m.name, m.text);
   else if (m.t === 'print') addChat(null, m.text);
-  else if (m.t === 'cfg') { world.doubleJump = !!m.doubleJump; addChat(null, `Double jump is ${world.doubleJump ? 'on' : 'off'}`); }
+  else if (m.t === 'cfg') {
+    if (m.doubleJump !== undefined) { world.doubleJump = !!m.doubleJump; addChat(null, `Double jump is ${world.doubleJump ? 'on' : 'off'}`); }
+    if (Number.isFinite(m.fragLimit)) { fragLimit = m.fragLimit; updateScores(); addChat(null, `The frag limit is ${fragLimit || 'off'}`); }
+  }
   else if (m.t === 'pong') rtt = performance.now() - m.n;
   else if (m.t === 'error') $('status').textContent = String(m.text);
 }
@@ -256,7 +259,7 @@ function addChat(name, text) {
   if (name) { const b = document.createElement('b'); b.textContent = name; row.append(b); } else row.className = 'sys';
   row.append(text);
   $('chatlog').append(row);
-  while ($('chatlog').children.length > 6) $('chatlog').firstChild.remove();
+  while ($('chatlog').children.length > 12) $('chatlog').firstChild.remove();
   setTimeout(() => row.remove(), 12000);
 }
 
@@ -486,6 +489,21 @@ document.addEventListener('pointerlockchange', () => {
   if (!input.locked() && joined && !input.typing) showMenu();
 });
 
+// The remote console password stays in memory only. The client does not save it.
+let rconPassword = '';
+
+// Handles a chat line that starts with "/". The client does not send such a line as chat.
+function chatCommand(text) {
+  const [name, ...args] = text.slice(1).split(/\s+/);
+  if (name !== 'rcon') { addChat(null, 'Commands: /rcon login <password>, /rcon <server command>, /rcon help'); return; }
+  if (conn.local) { addChat(null, 'The remote console works only on a server.'); return; }
+  if (args[0] === 'login') {
+    rconPassword = args.slice(1).join(' ');
+    conn.send({ t: 'rcon', pw: rconPassword, cmd: '' });
+  } else if (!rconPassword) addChat(null, 'First type: /rcon login <password>');
+  else conn.send({ t: 'rcon', pw: rconPassword, cmd: args.join(' ') || 'help' });
+}
+
 const chat = $('chatinput');
 input.onKey = (code) => {
   if (code === 'F3') { settings.perf = !settings.perf; $('perfon').checked = settings.perf; perf.setVisible(settings.perf); saveSettings(); }
@@ -500,9 +518,11 @@ input.onKey = (code) => {
 chat.addEventListener('keydown', (e) => {
   if (e.code !== 'Enter' && e.code !== 'Escape') return;
   e.preventDefault();
-  if (e.code === 'Enter' && chat.value.trim() && conn) {
-    if (conn.local) addChat(settings.name, chat.value.trim());
-    else conn.send({ t: 'chat', text: chat.value });
+  const text = chat.value.trim();
+  if (e.code === 'Enter' && text && conn) {
+    if (text.startsWith('/')) chatCommand(text);
+    else if (conn.local) addChat(settings.name, text);
+    else conn.send({ t: 'chat', text });
   }
   chat.hidden = true;
   chat.blur();

@@ -217,3 +217,19 @@ test('lag compensation hits a target at its position in the past', () => {
   assert.equal(run(false), 0);
   assert.ok(run(true) > 0);
 });
+
+test('the host removes a human player with kick', () => {
+  const sent = [];
+  let closed = false;
+  const host = new GameHost({ bots: 1, botFill: false, seed: 4 });
+  const c = host.connect({ send: (m) => sent.push(m), close() { closed = true; } });
+  c.message({ t: 'join', name: 'guest' });
+  const id = sent.find((m) => m.t === 'welcome').id;
+  const botId = [...host.bots.keys()][0];
+  assert.equal(host.kick(botId), null);
+  assert.equal(host.kick(999), null);
+  assert.equal(host.kick(id), 'guest');
+  assert.ok(closed);
+  assert.equal(host.humanCount(), 0);
+  assert.equal(host.game.players.has(id), false);
+});

@@ -2,6 +2,7 @@
 // The dedicated server. It runs the game, accepts WebSocket clients,
 // and serves the built web client over HTTP.
 import http from 'node:http';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -21,6 +22,7 @@ const OPTIONS = {
   doublejump: { env: 'DOUBLE_JUMP', def: 'off', help: 'on: a player can jump one more time in the air' },
   fraglimit: { env: 'FRAG_LIMIT', def: 20, help: 'Frags that end a match. 0 sets no limit' },
   timelimit: { env: 'TIME_LIMIT', def: 10, help: 'Match time in minutes. 0 sets no limit' },
+  rconpassword: { env: 'RCON_PASSWORD', def: '', help: 'Password for the remote console, 8 characters or more. Empty sets the remote console to off' },
 };
 
 function readOptions() {
@@ -32,7 +34,7 @@ function readOptions() {
     if (key === 'help' || !(key in OPTIONS) || i + 1 >= args.length) {
       console.log('Usage: node server/index.js [options]\n');
       for (const [k, d] of Object.entries(OPTIONS)) {
-        console.log(`  --${k.padEnd(11)} ${d.help} (default: ${d.def}, environment: ${d.env})`);
+        console.log(`  --${k.padEnd(13)} ${d.help} (default: ${d.def === '' ? 'empty' : d.def}, environment: ${d.env})`);
       }
       process.exit(key === 'help' ? 0 : 1);
     }
@@ -46,7 +48,13 @@ function readOptions() {
     }
     return v;
   };
+  const rconPassword = String(o.rconpassword);
+  if (rconPassword && rconPassword.length < 8) {
+    console.error('Option --rconpassword must have 8 characters or more.');
+    process.exit(1);
+  }
   return {
+    rconPassword,
     port: num('port', 1, 65535), host: String(o.host), name: String(o.name),
     maxClients: num('maxclients', 1, 32), bots: num('bots', 0, 15), botSkill: num('botskill', 1, 5),
     botFill: !/^(off|0|false|no)$/i.test(String(o.botfill)),
@@ -57,7 +65,7 @@ function readOptions() {
 
 const opts = readOptions();
 const log = (text) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${text}`);
-const game = new GameHost({ ...opts, log });
+const game = new GameHost({ ...opts, rconPassword: undefined, log });
 
 // ---------- HTTP ----------
 const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');
@@ -119,6 +127,10 @@ wss.on('connection', (ws, req) => {
     if (binary) return;
     let m;
     try { m = JSON.parse(data.toString()); } catch { return; }
+    if (m && m.t === 'rcon') {
+      rcon(m, addr, (text) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ t: 'print', text })); });
+      return;
+    }
     if (m && m.t === 'join' && !joined) { joined = true; log(`Connection from ${addr}`); }
     handle.message(m);
   });
@@ -158,45 +170,97 @@ setInterval(() => {
   if (now - tickStats.at >= 60000) { if (tickStats.n) log(tickLine()); resetTickStats(now); }
 }, 4);
 
-// ---------- Console ----------
+// ---------- Commands ----------
+// The local console and the remote console (rcon) use the same commands.
+// "out" is a function that writes one line of the answer.
+const HELP = 'status | bots <count> [skill 1-5] | botfill <on|off> | doublejump <on|off> | fraglimit <n> | timelimit <minutes> | restart | kick <player id> | say <text> | quit';
 const COMMANDS = {
-  help() {
-    console.log('status | bots <count> [skill 1-5] | botfill <on|off> | doublejump <on|off> | fraglimit <n> | timelimit <minutes> | restart | say <text> | quit');
-  },
-  status() {
+  help(out) { out(HELP); },
+  status(out) {
     const s = game.status();
-    console.log(`This minute: ${tickLine()}`);
-    console.log(`${s.name} | map ${s.map} | players ${s.players}/${s.maxClients} | bots ${s.bots} (target ${game.botCount}, skill ${game.botSkill}, fill ${game.botFill ? 'on' : 'off'}) | double jump ${s.doubleJump ? 'on' : 'off'}`);
-    for (const p of game.game.scores()) console.log(`  ${String(p.id).padStart(3)} ${p.name.padEnd(16)} ${p.bot ? 'bot  ' : 'human'} frags ${p.frags} deaths ${p.deaths}`);
+    out(`This minute: ${tickLine()}`);
+    out(`${s.name} | map ${s.map} | players ${s.players}/${s.maxClients} | bots ${s.bots} (target ${game.botCount}, skill ${game.botSkill}, fill ${game.botFill ? 'on' : 'off'}) | double jump ${s.doubleJump ? 'on' : 'off'} | frag limit ${game.game.fragLimit} | time limit ${game.game.timeLimit / 60} min`);
+    for (const p of game.game.scores()) out(`  ${String(p.id).padStart(3)} ${p.name.padEnd(16)} ${p.bot ? 'bot  ' : 'human'} frags ${p.frags} deaths ${p.deaths}`);
   },
-  bots(count, skill) {
+  bots(out, count, skill) {
     const n = Number(count), s = skill === undefined ? undefined : Number(skill);
-    if (!Number.isInteger(n) || n < 0 || n > 15 || (s !== undefined && !(s >= 1 && s <= 5))) return console.log('Usage: bots <0-15> [skill 1-5]');
+    if (!Number.isInteger(n) || n < 0 || n > 15 || (s !== undefined && !(Number.isInteger(s) && s >= 1 && s <= 5))) return out('Usage: bots <0-15> [skill 1-5]');
     game.setBots(n, s);
-    console.log(`Bots: target ${game.botCount}, skill ${game.botSkill}, active ${game.bots.size}`);
+    out(`Bots: target ${game.botCount}, skill ${game.botSkill}, active ${game.bots.size}`);
   },
-  botfill(v) {
-    game.setBots(game.botCount, undefined, v === 'on');
-    console.log(`Bot fill: ${game.botFill ? 'on' : 'off'}`);
+  botfill(out, v) {
+    if (v === 'on' || v === 'off') game.setBots(game.botCount, undefined, v === 'on');
+    out(`Bot fill: ${game.botFill ? 'on' : 'off'}`);
   },
-  doublejump(v) {
+  doublejump(out, v) {
     if (v === 'on' || v === 'off') game.setDoubleJump(v === 'on');
-    console.log(`Double jump: ${game.game.world.doubleJump ? 'on' : 'off'}`);
+    out(`Double jump: ${game.game.world.doubleJump ? 'on' : 'off'}`);
   },
-  fraglimit(v) { if (Number(v) >= 0) game.game.fragLimit = Number(v) | 0; console.log(`Frag limit: ${game.game.fragLimit}`); },
-  timelimit(v) { if (Number(v) >= 0) game.game.timeLimit = (Number(v) | 0) * 60; console.log(`Time limit: ${game.game.timeLimit / 60} minutes`); },
-  restart() { game.game.restart(); console.log('The match starts again.'); },
-  say(...words) { game.broadcast({ t: 'chat', name: 'server', text: words.join(' ').slice(0, 120) }); },
-  quit() { shutdown(); },
+  fraglimit(out, v) {
+    const n = Number(v);
+    if (v !== undefined && Number.isInteger(n) && n >= 0 && n <= 1000) { game.game.fragLimit = n; game.broadcast({ t: 'cfg', fragLimit: n }); }
+    out(`Frag limit: ${game.game.fragLimit}`);
+  },
+  timelimit(out, v) {
+    const n = Number(v);
+    if (v !== undefined && Number.isInteger(n) && n >= 0 && n <= 600) game.game.timeLimit = n * 60;
+    out(`Time limit: ${game.game.timeLimit / 60} minutes`);
+  },
+  restart(out) { game.game.restart(); out('The match starts again.'); },
+  kick(out, id) {
+    const name = game.kick(Number(id));
+    out(name ? `Removed ${name}.` : 'Usage: kick <player id>. The "status" command shows the ids of the human players.');
+  },
+  say(out, ...words) {
+    const text = words.join(' ').slice(0, 120);
+    if (text) game.broadcast({ t: 'chat', name: 'server', text });
+    out(text ? 'Sent.' : 'Usage: say <text>');
+  },
+  quit(out) { out('The server stops.'); shutdown(); },
 };
 
+function runCommand(line, out) {
+  const [name, ...args] = line.trim().split(/\s+/);
+  if (!name) return;
+  if (Object.hasOwn(COMMANDS, name)) COMMANDS[name](out, ...args);
+  else out(`Unknown command "${name}". Type "help".`);
+}
+
 if (process.stdin.isTTY || process.env.SERVER_CONSOLE === '1') {
-  readline.createInterface({ input: process.stdin }).on('line', (line) => {
-    const [name, ...args] = line.trim().split(/\s+/);
-    if (!name) return;
-    if (COMMANDS[name]) COMMANDS[name](...args);
-    else console.log(`Unknown command "${name}". Type "help".`);
-  });
+  readline.createInterface({ input: process.stdin }).on('line', (line) => runCommand(line, (text) => console.log(text)));
+}
+
+// ---------- Remote console (rcon) ----------
+// A client sends { t: 'rcon', pw: <password>, cmd: <command> }.
+const RCON_MAX_FAILS = 5;
+const RCON_BLOCK_MS = 60000;
+const rconHash = opts.rconPassword ? crypto.createHash('sha256').update(opts.rconPassword).digest() : null;
+const rconFails = new Map();
+
+function rcon(m, addr, reply) {
+  if (!rconHash) { reply('The remote console is off on this server.'); return; }
+  const now = Date.now();
+  let f = rconFails.get(addr);
+  if (f && f.until && now >= f.until) { rconFails.delete(addr); f = undefined; }
+  if (f && f.until) { reply('Too many incorrect passwords. Try again in one minute.'); return; }
+  // Compare the hashes in constant time. Then the time of the answer does not show the password.
+  const given = crypto.createHash('sha256').update(typeof m.pw === 'string' ? m.pw : '').digest();
+  if (!crypto.timingSafeEqual(given, rconHash)) {
+    f = f || { n: 0, until: 0 };
+    f.n++;
+    if (f.n >= RCON_MAX_FAILS) { f.until = now + RCON_BLOCK_MS; log(`rcon: ${addr} is blocked for one minute after ${f.n} incorrect passwords`); }
+    else log(`rcon: incorrect password from ${addr}`);
+    rconFails.set(addr, f);
+    if (rconFails.size > 1000) rconFails.delete(rconFails.keys().next().value);
+    reply('The remote console password is not correct.');
+    return;
+  }
+  rconFails.delete(addr);
+  const cmd = typeof m.cmd === 'string' ? m.cmd.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 200) : '';
+  if (!cmd) { reply('The password is correct. ' + HELP); return; }
+  log(`rcon from ${addr}: ${cmd}`);
+  let lines = 0;
+  runCommand(cmd, (text) => { if (lines++ < 40) reply(text); });
 }
 
 function shutdown() {
@@ -211,5 +275,5 @@ process.on('SIGTERM', shutdown);
 
 server.listen(opts.port, opts.host, () => {
   log(`${opts.name}: listening on http://${opts.host}:${opts.port}`);
-  log(`Bots ${opts.bots} (skill ${opts.botSkill}, fill ${opts.botFill ? 'on' : 'off'}), frag limit ${opts.fragLimit}, time limit ${opts.timeLimit} min, max clients ${opts.maxClients}, double jump ${opts.doubleJump ? 'on' : 'off'}`);
+  log(`Bots ${opts.bots} (skill ${opts.botSkill}, fill ${opts.botFill ? 'on' : 'off'}), frag limit ${opts.fragLimit}, time limit ${opts.timeLimit} min, max clients ${opts.maxClients}, double jump ${opts.doubleJump ? 'on' : 'off'}, remote console ${opts.rconPassword ? 'on' : 'off'}`);
 });

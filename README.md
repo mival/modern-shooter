@@ -114,6 +114,7 @@ The server stops the simulation when no human player is connected.
 | `--doublejump` | `DOUBLE_JUMP` | off | `on`: a player can jump one more time in the air. The server sends this setting to the clients. |
 | `--fraglimit` | `FRAG_LIMIT` | 20 | Frags that end a match. 0 sets no limit. |
 | `--timelimit` | `TIME_LIMIT` | 10 | Match time in minutes. 0 sets no limit. |
+| `--rconpassword` | `RCON_PASSWORD` | empty | Password for the remote console, 8 characters or more. Empty sets it to off. |
 
 With `--botfill on`, `--bots 4` means: the server keeps a minimum of 4 players. Bots fill the free places.
 
@@ -129,10 +130,46 @@ Type these commands in the terminal of the server:
 | `doublejump <on\|off>` | Set the double jump. The change applies immediately. |
 | `fraglimit <n>`, `timelimit <minutes>` | Change the match limits. |
 | `restart` | Start the match again. |
+| `kick <player id>` | Remove a human player. The `status` command shows the ids. |
 | `say <text>` | Send a message to all players. |
 | `quit` | Stop the server. |
 
 Set `SERVER_CONSOLE=1` to use the console when the input is not a terminal.
+
+### Remote console (rcon)
+
+The remote console runs the commands of the server console over the network. It changes the server setup during a game.
+It is off by default. To set it to on, give the server a password with 8 characters or more:
+
+```sh
+RCON_PASSWORD=my-secret-words npm run server
+```
+
+In the game, press Enter and type in the chat line:
+
+```
+/rcon login my-secret-words
+/rcon bots 6 2
+/rcon doublejump on
+/rcon status
+```
+
+The client does not send a line that starts with `/` as a chat message. It keeps the password in memory only.
+
+From a terminal:
+
+```sh
+RCON_PASSWORD=my-secret-words node tools/rcon.mjs ws://localhost:27960 fraglimit 30
+```
+
+Security:
+
+- The password gives full control of the server, including `quit`. Do not use it for other services.
+- After 5 incorrect passwords, the server blocks the remote console for that network address for one minute.
+  Behind a reverse proxy, all clients have the address of the proxy, and the block applies to all of them.
+- The server writes each remote command to its log. It does not write the password.
+- On a `ws://` connection, the password goes over the network without encryption. Use `wss://` (TLS) on the internet.
+- The changes are not permanent. After a restart, the server uses its start options again.
 
 ### Status endpoint
 

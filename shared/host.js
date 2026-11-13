@@ -122,6 +122,19 @@ export class GameHost {
     this.broadcast({ t: 'print', text });
   }
 
+  // Removes a human player from the server. Returns the name, or null if the id is not a human player.
+  kick(id) {
+    for (const c of this.clients) {
+      if (!c.player || c.player.id !== id) continue;
+      const name = c.player.name;
+      c.transport.send({ t: 'error', text: 'The server removed you from the game.' });
+      c.transport.close();
+      this.onClose(c);
+      return name;
+    }
+    return null;
+  }
+
   setBots(count, skill, fill) {
     this.botCount = clamp(count | 0, 0, MAX_BOTS);
     if (skill !== undefined) {

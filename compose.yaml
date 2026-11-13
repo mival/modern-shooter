@@ -18,5 +18,8 @@ services:
       BOT_FILL: "on"
       # "on": a player can jump one more time in the air.
       DOUBLE_JUMP: "off"
+      # Password for the remote console (rcon), 8 characters or more. Empty sets the remote console to off.
+      # Example: RCON_PASSWORD=my-secret-words docker compose up -d
+      RCON_PASSWORD: "${RCON_PASSWORD:-}"
       FRAG_LIMIT: "20"
       TIME_LIMIT: "10"
