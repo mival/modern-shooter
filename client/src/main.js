@@ -117,8 +117,12 @@ function startOffline() {
 function startOnline(address) {
   let url = address.trim();
   if (!url) { showMenu('Enter a server address.'); return; }
-  if (!/^wss?:\/\//.test(url)) url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + url;
-  if (!/:\d+(\/|$)/.test(url.replace(/^wss?:\/\//, ''))) url += ':' + DEFAULT_PORT;
+  // An address without a scheme and without a port gets the default game port.
+  // An address with ws:// or wss:// stays as it is, because a server behind a proxy uses port 80 or 443.
+  if (!/^wss?:\/\//.test(url)) {
+    if (!/:\d+(\/|$)/.test(url)) url += ':' + DEFAULT_PORT;
+    url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + url;
+  }
   leaveGame('Connecting…');
   let c;
   try {

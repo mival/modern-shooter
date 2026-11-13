@@ -145,13 +145,20 @@ docker compose up --build -d
 ```
 
 Each push to `main` starts a GitHub Actions workflow (`.github/workflows/docker.yml`).
-The workflow runs the tests, builds the image, and publishes it to the GitHub Container Registry:
+The workflow runs the tests, builds the image for `linux/amd64` and `linux/arm64`, and publishes it to the GitHub Container Registry:
 
 ```sh
 docker run -p 27960:27960 ghcr.io/mival/modern-shooter:latest
 ```
 
-Change the settings in `compose.yaml`. To use the console in a container, add `stdin_open: true`, `tty: true`,
+To use a different port, set `PORT`. The server listens on that port in the container:
+
+```sh
+PORT=28000 docker compose up --build -d
+docker run -e PORT=28000 -p 28000:28000 ghcr.io/mival/modern-shooter:latest
+```
+
+Change the other settings in `compose.yaml`. To use the console in a container, add `stdin_open: true`, `tty: true`,
 and run `docker attach <container>`.
 
 ### Internet hosting

@@ -1,5 +1,6 @@
 # Stage 1: build the web client.
-FROM node:24-alpine AS build
+# This stage runs on the platform of the build machine. Its output is the same for all platforms.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
