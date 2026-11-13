@@ -266,6 +266,7 @@ and run `docker attach <container>`.
 npm run dev      # Vite development server for the client, with reload.
 npm run server   # Dedicated server. The development client can connect to ws://localhost:27960.
 npm test         # Simulation tests.
+npm run build && BROWSER_PATH=/path/to/chrome npm run test:browser   # Browser test with headless Chrome.
 node tools/bot-accuracy.mjs   # Measure the hit rate of the bots for each skill level.
 ```
 

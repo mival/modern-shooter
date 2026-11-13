@@ -575,7 +575,14 @@ fetch('status').then((r) => (r.ok ? r.json() : null)).then((s) => {
 }).catch(() => {});
 
 // The "debug" parameter gives test scripts access to the input and the renderer.
-if (params.has('debug')) window.game = { input, renderer, get conn() { return conn; }, get myId() { return myId; } };
+if (params.has('debug')) {
+  window.game = {
+    input, renderer,
+    get conn() { return conn; }, get myId() { return myId; }, get mapId() { return map.id; },
+    // The predicted position of the local player, or null before the first snapshot.
+    get pos() { return me ? { x: local.x, y: local.y, z: local.z } : null; },
+  };
+}
 if (params.has('offline')) startOffline();
 else if (params.has('connect')) startOnline(params.get('connect'));
 requestAnimationFrame(frame);
