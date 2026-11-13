@@ -89,21 +89,20 @@ export function buildMap() {
     spawn(sx * 960, UP, sz * 720);
   }
 
-  // Jump pads. "target" is the top point of the flight path.
+  // Jump pads. A pad pushes the player up. It does not change the horizontal movement.
+  // "top" is the height that the player origin reaches. "land" is where the bots go after the pad.
   const pads = [];
-  const pad = (x, z, hw, target, land) => {
-    const from = [x, FLOOR, z];
-    const h = target[1] - from[1];
-    const t = Math.sqrt(h / (0.5 * PM.gravity));
+  const pad = (x, z, hw, top, land) => {
     pads.push({
       min: [x - hw, 0, z - hw], max: [x + hw, 32, z + hw],
-      pos: from, land,
-      vel: [(target[0] - from[0]) / t, t * PM.gravity, (target[2] - from[2]) / t],
+      pos: [x, FLOOR, z], land,
+      up: Math.sqrt(2 * PM.gravity * (top - FLOOR)),
     });
   };
   for (const s of [1, -1]) {
-    pad(0, s * 272, 40, [0, 200, s * 60], [0, 128 + FLOOR, 0]);
-    pad(0, s * 700, 44, [0, UP + 74, s * 900], [0, UP + FLOOR, s * 944]);
+    // The pads are near the pedestal and the walkways. A small move in the air is sufficient to land.
+    pad(0, s * 162, 40, 185, [0, 128 + FLOOR, 0]);
+    pad(0, s * 786, 44, UP + 84, [0, UP + FLOOR, s * 944]);
   }
 
   // More navigation points for the bots.

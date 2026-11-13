@@ -71,7 +71,8 @@ The menu has the bot setup for the offline mode:
 
 - "Bots" sets the bots to on or off.
 - "Bot count" sets the number of bots (1 to 15).
-- "Bot skill" sets the skill (1 to 5).
+- "Bot skill" sets the skill (1 to 5). A higher skill reacts faster, aims better, and does more damage.
+  Skill 5 does the full weapon damage. Skill 1 does 40% of it.
 - "Double jump" lets each player jump one more time in the air.
 
 During an offline game, press Esc, change the setup, and select "Apply bot setup".

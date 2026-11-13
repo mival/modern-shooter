@@ -94,12 +94,13 @@ function shortestPaths(nav, from) {
 // lag: the bot aims at the position that the enemy had this many seconds before.
 // predict: how much of the enemy movement the bot predicts (0 = none, 1 = all).
 // track: how fast the aim follows the target. pause: time between bursts of an automatic weapon.
+// damage: factor for the damage that the bot does to other players.
 const SKILLS = [
-  { err: 0.28, turn: 3.5, react: 0.7, lag: 0.4, predict: 0, track: 4, pause: 0.6 },
-  { err: 0.2, turn: 5, react: 0.5, lag: 0.32, predict: 0.3, track: 6, pause: 0.45 },
-  { err: 0.125, turn: 7, react: 0.38, lag: 0.24, predict: 0.55, track: 8, pause: 0.3 },
-  { err: 0.065, turn: 9, react: 0.25, lag: 0.16, predict: 0.8, track: 12, pause: 0.15 },
-  { err: 0.028, turn: 12, react: 0.15, lag: 0.09, predict: 0.95, track: 18, pause: 0 },
+  { err: 0.28, turn: 3.5, react: 0.7, lag: 0.4, predict: 0, track: 4, pause: 0.6, damage: 0.4 },
+  { err: 0.2, turn: 5, react: 0.5, lag: 0.32, predict: 0.3, track: 6, pause: 0.45, damage: 0.55 },
+  { err: 0.125, turn: 7, react: 0.38, lag: 0.24, predict: 0.55, track: 8, pause: 0.3, damage: 0.7 },
+  { err: 0.065, turn: 9, react: 0.25, lag: 0.16, predict: 0.8, track: 12, pause: 0.15, damage: 0.85 },
+  { err: 0.028, turn: 12, react: 0.15, lag: 0.09, predict: 0.95, track: 18, pause: 0, damage: 1 },
 ];
 // A bot sees an enemy inside this angle from its view direction (cosine of 80 degrees).
 const VIEW_COS = 0.17;
@@ -108,6 +109,7 @@ export class Bot {
   constructor(game, nav, player, skill = 3) {
     this.game = game; this.nav = nav; this.p = player;
     this.skill = SKILLS[Math.max(1, Math.min(5, skill)) - 1];
+    player.damageScale = this.skill.damage;
     this.rand = game.rng;
     this.cmd = { seq: 0, fwd: 0, side: 0, buttons: 0, yaw: player.yaw, pitch: 0, weapon: -1 };
     this.path = []; this.enemy = null; this.seenAt = 0;

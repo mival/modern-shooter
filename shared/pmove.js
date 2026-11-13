@@ -132,8 +132,9 @@ export function pmove(p, cmd, w, dt) {
     if (p.x + PM.hx > pad.min[0] && p.x - PM.hx < pad.max[0] &&
         p.z + PM.hx > pad.min[2] && p.z - PM.hx < pad.max[2] &&
         p.y + PM.minY < pad.max[1] && p.y + PM.maxY > pad.min[1]) {
-      if (p.vy !== pad.vel[1]) flags |= PMF_PAD;
-      p.vx = pad.vel[0]; p.vy = pad.vel[1]; p.vz = pad.vel[2];
+      // The pad sets only the upward speed. The player keeps the horizontal movement.
+      if (p.vy !== pad.up) flags |= PMF_PAD;
+      p.vy = pad.up;
       p.ground = false;
     }
   }

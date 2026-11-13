@@ -281,6 +281,8 @@ export class Game {
     target.vx += dx * k; target.vy += dy * k; target.vz += dz * k;
     // A player takes half of the damage from the player's own weapon.
     if (attacker === target) amount *= 0.5;
+    // A bot with a low skill does less damage to other players.
+    else if (attacker && attacker.damageScale) amount *= attacker.damageScale;
     amount = Math.ceil(amount);
     const save = Math.min(target.armor, Math.ceil(amount * ARMOR_ABSORB));
     target.armor -= save;

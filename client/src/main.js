@@ -207,7 +207,8 @@ function onEvent(e, s) {
     else if (e.a === myId) { play('hit'); hitUntil = performance.now() + 120; }
   } else if (e.t === 'kill') {
     const v = s.pm.get(e.v);
-    if (v) { renderer.burst(v[1], v[2], v[3], playerColor(e.v)); play('death', e.v === myId ? 0 : dist(v[1], v[2], v[3])); }
+    // Do not draw the effect for the local player. It is at the camera position and hides the view.
+    if (v) { if (e.v !== myId) renderer.burst(v[1], v[2], v[3], playerColor(e.v)); play('death', e.v === myId ? 0 : dist(v[1], v[2], v[3])); }
     addFeed(e);
     if (e.k === myId && e.v !== myId) { center(`You ${e.w === W_HAMMER ? 'hammered' : 'fragged'} ${nameOf(e.v)}`, 2200); play('frag'); }
     else if (e.v === myId) center(e.k && e.k !== myId ? `Fragged by ${nameOf(e.k)}` : 'You fragged yourself', 2500);

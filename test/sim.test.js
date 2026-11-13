@@ -68,9 +68,23 @@ test('a player walks up the stairs', () => {
 
 test('a jump pad puts the player on the pedestal', () => {
   const p = stand(0, 400);
-  for (let i = 0; i < 40; i++) pmove(p, cmd({ fwd: 1 }), world, TICK);
-  for (let i = 0; i < 120; i++) pmove(p, cmd(), world, TICK);
+  // Run to the pad. In the air, move back when the player is above the pedestal.
+  for (let i = 0; i < 150; i++) pmove(p, cmd({ fwd: p.ground && p.y > 100 ? 0 : p.z > 40 ? 1 : -1 }), world, TICK);
   assert.ok(p.ground && Math.abs(p.y - 152) < 1, `y ${p.y}`);
+});
+
+test('a jump pad keeps the horizontal movement', () => {
+  // Cross the pad along the x axis. The pad must not push the player to the pedestal.
+  const p = stand(-200, 162);
+  let top = 0, vxOnPad = 0;
+  for (let i = 0; i < 120; i++) {
+    pmove(p, cmd({ fwd: 1, yaw: -Math.PI / 2 }), world, TICK);
+    if (p.y > top) top = p.y;
+    if (!vxOnPad && p.vy > 400) vxOnPad = p.vx;
+  }
+  assert.ok(vxOnPad > 300, `speed on the pad ${vxOnPad}`);
+  assert.ok(top > 170 && top < 215, `top ${top}`);
+  assert.ok(Math.abs(p.z - 162) < 1 && p.x > 150, `position ${p.x}, ${p.z}`);
 });
 
 test('a rocket jump goes higher than a normal jump', () => {
@@ -144,7 +158,7 @@ test('the bots can go from each spawn point to each item', () => {
 });
 
 test('a match with bots runs to the frag limit', () => {
-  const host = new GameHost({ bots: 6, botFill: false, fragLimit: 10, timeLimit: 0, seed: 7 });
+  const host = new GameHost({ bots: 6, botSkill: 5, botFill: false, fragLimit: 10, timeLimit: 0, seed: 7 });
   const g = host.game;
   let ended = false, picks = 0;
   for (let i = 0; i < 60 * 600 && !ended; i++) {
