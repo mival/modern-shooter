@@ -88,13 +88,21 @@ function shortestPaths(nav, from) {
   return { cost, prev };
 }
 
+// Bot skill levels.
+// err: aim error in radians. turn: maximum turn rate in radians each second.
+// react: time in seconds before the bot fires at a new enemy.
+// lag: the bot aims at the position that the enemy had this many seconds before.
+// predict: how much of the enemy movement the bot predicts (0 = none, 1 = all).
+// track: how fast the aim follows the target. pause: time between bursts of an automatic weapon.
 const SKILLS = [
-  { err: 0.22, turn: 3.5, react: 0.7 },
-  { err: 0.15, turn: 5, react: 0.5 },
-  { err: 0.095, turn: 7, react: 0.38 },
-  { err: 0.055, turn: 9, react: 0.25 },
-  { err: 0.03, turn: 12, react: 0.15 },
+  { err: 0.28, turn: 3.5, react: 0.7, lag: 0.4, predict: 0, track: 4, pause: 0.6 },
+  { err: 0.2, turn: 5, react: 0.5, lag: 0.32, predict: 0.3, track: 6, pause: 0.45 },
+  { err: 0.125, turn: 7, react: 0.38, lag: 0.24, predict: 0.55, track: 8, pause: 0.3 },
+  { err: 0.065, turn: 9, react: 0.25, lag: 0.16, predict: 0.8, track: 12, pause: 0.15 },
+  { err: 0.028, turn: 12, react: 0.15, lag: 0.09, predict: 0.95, track: 18, pause: 0 },
 ];
+// A bot sees an enemy inside this angle from its view direction (cosine of 80 degrees).
+const VIEW_COS = 0.17;
 
 export class Bot {
   constructor(game, nav, player, skill = 3) {
@@ -108,6 +116,7 @@ export class Bot {
     this.goalUntil = 0; this.checkAt = 0; this.checkX = 0; this.checkZ = 0; this.stuck = 0;
     this.phase = Math.floor(this.rand() * 6); this.ticks = 0; this.padSeen = -1;
     this.spawnCount = -1;
+    this.burstEnd = 0; this.pauseEnd = 0;
   }
 
   nearestNode() {
@@ -161,6 +170,10 @@ export class Bot {
       if (q === p || q.dead) continue;
       const d = Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z);
       if (d >= bd || d > 3000) continue;
+      // A bot does not see behind its back. It turns to an enemy that is near or that hurt it.
+      const facing = (-Math.sin(this.cmd.yaw) * (q.x - p.x) - Math.cos(this.cmd.yaw) * (q.z - p.z)) / (d || 1);
+      const hurt = q.id === p.lastHurtBy && this.game.time - p.lastHurtAt < 3;
+      if (facing < VIEW_COS && d > 250 && !hurt && q !== this.enemy) continue;
       traceBox(this.game.world, p.x, p.y + PM.eye, p.z, q.x, q.y + PM.eye, q.z, 0, 0, 0, tr);
       if (tr.f >= 1) { best = q; bd = d; }
     }
@@ -240,18 +253,24 @@ export class Bot {
     let wantYaw = cmd.yaw, wantPitch = 0;
     const e = this.enemy;
     if (e) {
-      const def = WEAPONS[p.weapon];
-      let tx = e.x, ty = e.y + 8, tz = e.z;
+      const def = WEAPONS[p.weapon], s = this.skill;
+      // The bot reacts with a delay, as a person does. It aims at an old position of the enemy
+      // and predicts the movement from an old velocity. A change of direction makes the bot miss.
+      const seen = g.posAt(e, now - s.lag);
+      const px = seen.x, py = seen.y, pz = seen.z;
+      const before = g.posAt(e, now - s.lag - 0.1);
+      const evx = (px - before.x) / 0.1, evz = (pz - before.z) / 0.1;
       const dist = Math.hypot(e.x - p.x, e.y - p.y, e.z - p.z);
-      if (def.kind === 'projectile') {
-        const t = dist / def.speed;
-        tx += e.vx * t; tz += e.vz * t;
-        if (p.weapon === W_RL && e.y <= p.y + 40) ty = e.y - 20;
-      }
+      const lead = (s.lag + (def.kind === 'projectile' ? dist / def.speed : 0)) * s.predict;
+      const tx = px + evx * lead, tz = pz + evz * lead;
+      let ty = py + 8;
+      if (p.weapon === W_RL && e.y <= p.y + 40) ty = py - 20;
       if (now >= this.nextErr) {
-        this.nextErr = now + 0.35;
-        this.errYaw = (this.rand() - 0.5) * 2 * this.skill.err;
-        this.errPitch = (this.rand() - 0.5) * this.skill.err;
+        this.nextErr = now + 0.25 + this.rand() * 0.25;
+        // A target that moves fast is more difficult to follow.
+        const k = s.err * (1 + Math.hypot(evx, evz) / PM.speed);
+        this.errYaw = (this.rand() - 0.5) * 2 * k;
+        this.errPitch = (this.rand() - 0.5) * k;
       }
       const dx = tx - p.x, dy = ty - (p.y + PM.eye), dz = tz - p.z;
       wantYaw = yawTo(dx, dz) + this.errYaw;
@@ -259,7 +278,14 @@ export class Bot {
       if (now - this.seenAt > 0.5 || p.weaponTime <= 0) cmd.weapon = this.chooseWeapon(dist);
       const off = Math.abs(angleDiff(wantYaw, cmd.yaw)) + Math.abs(wantPitch - cmd.pitch);
       const inRange = def.kind === 'beam' ? dist < def.range : def.kind === 'melee' ? dist < def.range + 25 : true;
-      if (now - this.seenAt > this.skill.react && off < 0.12 + 20 / (dist + 1) && inRange) cmd.buttons |= BTN_FIRE;
+      if (now - this.seenAt > s.react && off < 0.12 + 20 / (dist + 1) && inRange && now >= this.pauseEnd) {
+        cmd.buttons |= BTN_FIRE;
+        // An automatic weapon fires in bursts with a pause between them.
+        if (def.reload <= 0.1 && s.pause > 0) {
+          if (now > this.burstEnd + 0.2) this.burstEnd = now + 0.5 + this.rand() * 0.6;
+          else if (now >= this.burstEnd) { this.pauseEnd = now + s.pause * (0.6 + this.rand() * 0.8); this.burstEnd = this.pauseEnd + 0.5 + this.rand() * 0.6; }
+        }
+      }
       // Move sideways to be a more difficult target.
       if (now >= this.nextStrafe) {
         this.nextStrafe = now + 0.5 + this.rand() * 0.9;
@@ -274,10 +300,11 @@ export class Bot {
       wantYaw = yawTo(mx, mz);
     }
 
-    const maxTurn = this.skill.turn * TICK;
-    const dyaw = angleDiff(wantYaw, cmd.yaw);
+    // The aim moves a part of the distance to the target each tick. Thus the aim is behind a fast target.
+    const maxTurn = this.skill.turn * TICK, follow = Math.min(1, this.skill.track * TICK);
+    const dyaw = angleDiff(wantYaw, cmd.yaw) * follow;
     cmd.yaw += Math.max(-maxTurn, Math.min(maxTurn, dyaw));
-    cmd.pitch += Math.max(-maxTurn, Math.min(maxTurn, wantPitch - cmd.pitch));
+    cmd.pitch += Math.max(-maxTurn, Math.min(maxTurn, (wantPitch - cmd.pitch) * follow));
     cmd.pitch = Math.max(-1.5, Math.min(1.5, cmd.pitch));
 
     // Change the world direction into the forward and side inputs.

@@ -148,6 +148,7 @@ and run `docker attach <container>`.
 npm run dev      # Vite development server for the client, with reload.
 npm run server   # Dedicated server. The development client can connect to ws://localhost:27960.
 npm test         # Simulation tests.
+node tools/bot-accuracy.mjs   # Measure the hit rate of the bots for each skill level.
 ```
 
 Useful URL parameters: `?offline` starts an offline game, `?connect=ws://host:27960` connects to a server,

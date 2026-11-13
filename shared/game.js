@@ -11,7 +11,7 @@ const tr = newTrace();
 const past = { x: 0, y: 0, z: 0 };
 // The server moves targets back in time by this maximum, in seconds.
 const MAX_REWIND = 0.3;
-const HISTORY = 24;
+const HISTORY = 40;
 const r1 = (v) => Math.round(v * 10) / 10;
 const r3 = (v) => Math.round(v * 1000) / 1000;
 
@@ -65,7 +65,7 @@ export class Game {
       health: 0, armor: 0, weapon: W_MG, wantWeapon: W_MG, weapons: 0,
       ammo: WEAPONS.map(() => 0), weaponTime: 0, beam: false, amp: 0,
       dead: false, deadAt: 0, respawnAt: 0, frags: 0, deaths: 0,
-      lastPad: -1, lastHurtBy: 0, spawnCount: 0,
+      lastPad: -1, lastHurtBy: 0, lastHurtAt: -10, spawnCount: 0,
     };
     this.players.set(id, p);
     this.spawn(p);
@@ -287,7 +287,7 @@ export class Game {
     const take = amount - save;
     target.health -= take;
     this.events.push({ t: 'pain', id: target.id, a: attacker ? attacker.id : 0, d: amount });
-    if (attacker && attacker !== target) target.lastHurtBy = attacker.id;
+    if (attacker && attacker !== target) { target.lastHurtBy = attacker.id; target.lastHurtAt = this.time; }
     if (target.health <= 0) this.kill(target, attacker, weapon);
   }
 
