@@ -179,18 +179,22 @@ const COMMANDS = {
   status(out) {
     const s = game.status();
     out(`This minute: ${tickLine()}`);
-    out(`${s.name} | map ${s.map} | players ${s.players}/${s.maxClients} | bots ${s.bots} (target ${game.botCount}, skill ${game.botSkill}, fill ${game.botFill ? 'on' : 'off'}) | double jump ${s.doubleJump ? 'on' : 'off'} | frag limit ${game.game.fragLimit} | time limit ${game.game.timeLimit / 60} min`);
+    out(`${s.name} | map ${s.map} | players ${s.players}/${s.maxClients} | bots ${s.bots} (${game.botFill ? `fill on: ${game.botCount} players in total` : 'fill off'}, skill ${game.botSkill}) | double jump ${s.doubleJump ? 'on' : 'off'} | frag limit ${game.game.fragLimit} | time limit ${game.game.timeLimit / 60} min`);
     for (const p of game.game.scores()) out(`  ${String(p.id).padStart(3)} ${p.name.padEnd(16)} ${p.bot ? 'bot  ' : 'human'} frags ${p.frags} deaths ${p.deaths}`);
   },
   bots(out, count, skill) {
     const n = Number(count), s = skill === undefined ? undefined : Number(skill);
     if (!Number.isInteger(n) || n < 0 || n > 15 || (s !== undefined && !(Number.isInteger(s) && s >= 1 && s <= 5))) return out('Usage: bots <0-15> [skill 1-5]');
-    game.setBots(n, s);
-    out(`Bots: target ${game.botCount}, skill ${game.botSkill}, active ${game.bots.size}`);
+    // This command sets the exact number of bots. Thus it sets the bot fill to off.
+    const hadFill = game.botFill;
+    game.setBots(n, s, false);
+    out(`Bots: ${game.bots.size}, skill ${game.botSkill}.${hadFill ? ' Bot fill is now off.' : ''}`);
   },
   botfill(out, v) {
     if (v === 'on' || v === 'off') game.setBots(game.botCount, undefined, v === 'on');
-    out(`Bot fill: ${game.botFill ? 'on' : 'off'}`);
+    out(game.botFill
+      ? `Bot fill: on. The server keeps ${game.botCount} players in total. A bot leaves when a player joins. Active bots: ${game.bots.size}`
+      : `Bot fill: off. The number of bots is constant. Active bots: ${game.bots.size}`);
   },
   doublejump(out, v) {
     if (v === 'on' || v === 'off') game.setDoubleJump(v === 'on');

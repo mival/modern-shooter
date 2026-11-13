@@ -125,8 +125,8 @@ Type these commands in the terminal of the server:
 | Command | Description |
 | --- | --- |
 | `status` | Show the players and the bot setup. |
-| `bots <count> [skill]` | Set the number of bots. `bots 0` sets the bots to off. |
-| `botfill <on\|off>` | Set the bot fill mode. |
+| `bots <count> [skill]` | Set the exact number of bots. Real players do not change it. This command sets the bot fill to off. `bots 0` removes all bots. |
+| `botfill <on\|off>` | `on`: the bot count becomes the total number of players, and a bot leaves when a player joins. `off`: the number of bots is constant. |
 | `doublejump <on\|off>` | Set the double jump. The change applies immediately. |
 | `fraglimit <n>`, `timelimit <minutes>` | Change the match limits. |
 | `restart` | Start the match again. |
