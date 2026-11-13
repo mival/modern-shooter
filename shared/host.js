@@ -2,15 +2,22 @@
 // It does not know the transport. The dedicated server uses WebSocket.
 // The offline mode runs the host in the browser.
 import { Game } from './game.js';
-import { buildMap } from './map.js';
+import { buildMap, MAPS, DEFAULT_MAP } from './map.js';
 import { Bot, buildNav } from './bot.js';
-import { TICK_RATE, SNAP_EVERY, GAME_ID, BOT_NAMES, WEAPONS } from './constants.js';
+import { TICK, TICK_RATE, SNAP_EVERY, GAME_ID, BOT_NAMES, WEAPONS } from './constants.js';
 
 const MAX_QUEUE = 20;
 const MAX_CMDS_PER_TICK = 3;
 const MAX_BOTS = 15;
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+
+// Returns the valid map ids of a list, or null if the list has none.
+function cleanMaps(list) {
+  if (!Array.isArray(list)) return null;
+  const ids = list.filter((id) => typeof id === 'string' && Object.hasOwn(MAPS, id));
+  return ids.length ? ids.slice(0, 32) : null;
+}
 
 function cleanText(s, max) {
   if (typeof s !== 'string') return '';
@@ -29,7 +36,11 @@ export class GameHost {
     this.log = opts.log || (() => {});
     // The owner of the host can set this function. The host calls it after a setting changed.
     this.onSettings = null;
-    this.game = new Game(buildMap(), opts);
+    // "rotation" is the list of map ids. The host goes to the next map after each match.
+    this.rotation = cleanMaps(opts.maps) || [DEFAULT_MAP];
+    this.mapId = this.rotation[0];
+    this.seed = opts.seed;
+    this.game = new Game(buildMap(this.mapId), opts);
     this.nav = null;
     this.clients = new Set();
     this.bots = new Map();
@@ -70,7 +81,7 @@ export class GameHost {
         t: 'welcome', game: GAME_ID, id: c.player.id, server: this.name,
         tickRate: TICK_RATE, snapEvery: SNAP_EVERY,
         fragLimit: this.game.fragLimit, timeLimit: this.game.timeLimit,
-        doubleJump: this.game.world.doubleJump,
+        doubleJump: this.game.world.doubleJump, map: this.mapId,
       });
       this.log(`${name} joined (id ${c.player.id})`);
       this.print(`${name} entered the arena`);
@@ -152,13 +163,44 @@ export class GameHost {
     this.broadcast({ t: 'cfg', doubleJump: this.game.world.doubleJump });
   }
 
+  // Starts a new match on the given map. The players stay connected.
+  changeMap(id) {
+    if (!Object.hasOwn(MAPS, id)) return false;
+    const old = this.game;
+    this.mapId = id;
+    this.game = new Game(buildMap(id), {
+      fragLimit: old.fragLimit, timeLimit: old.timeLimit / 60, spawnProtect: old.spawnProtect,
+      doubleJump: old.world.doubleJump, seed: this.seed === undefined ? undefined : this.seed + this.ticks,
+    });
+    // The navigation graph and the bots belong to the old map.
+    this.nav = null;
+    this.bots.clear();
+    this.broadcast({ t: 'map', map: id });
+    for (const c of this.clients) {
+      if (!c.player) continue;
+      c.player = this.game.addPlayer(c.player.id, c.player.name, false);
+      c.queue.length = 0;
+      // The game time starts again at zero.
+      c.chatAt = -10; c.perfAt = -10;
+    }
+    this.balanceBots();
+    this.log(`Map: ${this.game.map.name} (${id})`);
+    this.print(`Map: ${this.game.map.name}`);
+    return true;
+  }
+
+  nextMapId() {
+    const i = this.rotation.indexOf(this.mapId);
+    return this.rotation[(i + 1) % this.rotation.length];
+  }
+
   // Returns the settings that an operator can change during a game.
   getSettings() {
     const g = this.game;
     return {
       bots: this.botCount, botSkill: this.botSkill, botFill: this.botFill,
       doubleJump: g.world.doubleJump, fragLimit: g.fragLimit, timeLimit: g.timeLimit / 60,
-      spawnProtect: g.spawnProtect,
+      spawnProtect: g.spawnProtect, maps: this.rotation.slice(),
     };
   }
 
@@ -178,6 +220,7 @@ export class GameHost {
     }
     if (int(v.timeLimit, 0, 600)) g.timeLimit = v.timeLimit * 60;
     if (Number.isFinite(v.spawnProtect) && v.spawnProtect >= 0 && v.spawnProtect <= 10) g.spawnProtect = v.spawnProtect;
+    if (cleanMaps(v.maps)) this.rotation = cleanMaps(v.maps);
     const changed = JSON.stringify(this.getSettings()) !== before;
     if (changed && notify && this.onSettings) this.onSettings(this.getSettings());
     return changed;
@@ -213,6 +256,12 @@ export class GameHost {
       }
     }
     for (const bot of this.bots.values()) g.runCmd(bot.p, bot.think());
+    // At the end of the intermission, go to the next map of the rotation.
+    if (g.state === 'intermission' && g.time + TICK >= g.stateEnd && this.nextMapId() !== this.mapId) {
+      this.changeMap(this.nextMapId());
+      this.ticks++;
+      return;
+    }
     g.tick();
     this.ticks++;
     if (this.ticks % SNAP_EVERY === 0) {
@@ -234,7 +283,7 @@ export class GameHost {
 
   status() {
     return {
-      game: GAME_ID, name: this.name, map: this.game.map.name,
+      game: GAME_ID, name: this.name, map: this.game.map.name, mapId: this.mapId,
       players: this.humanCount(), maxClients: this.maxClients, bots: this.bots.size,
       doubleJump: this.game.world.doubleJump,
     };

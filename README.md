@@ -77,6 +77,17 @@ The menu has the bot setup for the offline mode:
 
 During an offline game, press Esc, change the setup, and select "Apply bot setup".
 
+## Maps
+
+| Id | Name | Description |
+| --- | --- | --- |
+| `yard` | Crossfire Yard | A large open arena with four corner platforms, for 4 to 12 players. |
+| `deck` | Twin Deck | A small arena with a balcony and a bridge, for 2 to 4 players. |
+
+The offline menu has a "Map" option: one map, or all maps in rotation.
+`shared/map.js` contains the maps. A map is a list of boxes, items, spawn points, jump pads, and navigation points.
+After a change, run `node tools/map-check.mjs`. It checks that no point is in a box and that the bots can go to each item.
+
 ## Performance graph
 
 Press F3, or set "Performance graph" in the menu, to show the frame time graph.
@@ -114,6 +125,7 @@ The server stops the simulation when no human player is connected.
 | `--doublejump` | `DOUBLE_JUMP` | off | `on`: a player can jump one more time in the air. The server sends this setting to the clients. |
 | `--fraglimit` | `FRAG_LIMIT` | 20 | Frags that end a match. 0 sets no limit. |
 | `--timelimit` | `TIME_LIMIT` | 10 | Match time in minutes. 0 sets no limit. |
+| `--maps` | `MAPS` | yard,deck | Map rotation, a list with commas. The first map starts. After each match, the server goes to the next map. |
 | `--spawnprotect` | `SPAWN_PROTECT` | 2 | Seconds without damage after a spawn. The protection stops when the player fires. 0 sets it to off. |
 | `--rconpassword` | `RCON_PASSWORD` | empty | Password for the remote console, 8 characters or more. Empty sets it to off. |
 
@@ -131,6 +143,9 @@ Type these commands in the terminal of the server:
 | `doublejump <on\|off>` | Set the double jump. The change applies immediately. |
 | `fraglimit <n>`, `timelimit <minutes>` | Change the match limits. |
 | `spawnprotect <seconds>` | Set the time without damage after a spawn (0 to 10). |
+| `map <id>` | Start a new match on a map immediately. |
+| `nextmap` | Go to the next map of the rotation. |
+| `maps [id,id]` | Show or set the map rotation. |
 | `restart` | Start the match again. |
 | `kick <player id>` | Remove a human player. The `status` command shows the ids. |
 | `say <text>` | Send a message to all players. |

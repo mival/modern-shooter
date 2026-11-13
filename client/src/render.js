@@ -91,8 +91,11 @@ export class Renderer {
     this.kick = 0;
     this.viewWeapon = -1;
 
-    this.buildLevel();
-    this.buildItems();
+    this.buildSky();
+    this.levelMat = new THREE.MeshStandardMaterial({ map: panelTexture(), vertexColors: true, roughness: 0.82, metalness: 0.15 });
+    this.lineMat = new THREE.LineBasicMaterial({ vertexColors: true });
+    this.level = null;
+    this.loadMap(map, world);
     this.buildViewModel();
 
     this.quality = QUALITY[opts.quality] || QUALITY.medium;
@@ -166,6 +169,38 @@ export class Renderer {
     this.camera.updateProjectionMatrix();
   }
 
+  // Removes the level of the old map and builds the level of the new map.
+  loadMap(map, world) {
+    this.map = map; this.world = world;
+    if (this.level) {
+      this.scene.remove(this.level);
+      this.level.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material && o.material !== this.levelMat && o.material !== this.lineMat) o.material.dispose();
+      });
+    }
+    this.level = new THREE.Group();
+    this.scene.add(this.level);
+    this.buildLevel();
+    this.buildItems();
+  }
+
+  // The lights and the stars are the same for all maps.
+  buildSky() {
+    this.scene.add(new THREE.HemisphereLight(0xb4c4ff, 0x4a3a5c, 3.4));
+    const sun = new THREE.DirectionalLight(0xfff0dd, 2.6);
+    sun.position.set(500, 900, 300);
+    this.scene.add(sun);
+    const stars = [];
+    for (let i = 0; i < 700; i++) {
+      const a = Math.random() * Math.PI * 2, h = Math.random() * 0.9 + 0.1, r = 5000;
+      stars.push(Math.cos(a) * r * Math.sqrt(1 - h * h), h * r, Math.sin(a) * r * Math.sqrt(1 - h * h));
+    }
+    const sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.Float32BufferAttribute(stars, 3));
+    this.scene.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xbfd0ff, size: 14, fog: false })));
+  }
+
   buildLevel() {
     const geos = [], lines = [], lineColors = [];
     const col = new THREE.Color();
@@ -197,24 +232,22 @@ export class Renderer {
         for (let i = 0; i < 8; i++) lineColors.push(col.r, col.g, col.b);
       }
     }
-    const mat = new THREE.MeshStandardMaterial({ map: panelTexture(), vertexColors: true, roughness: 0.82, metalness: 0.15 });
-    this.scene.add(new THREE.Mesh(mergeGeometries(geos), mat));
+    this.level.add(new THREE.Mesh(mergeGeometries(geos), this.levelMat));
+    for (const g of geos) g.dispose();
     const lg = new THREE.BufferGeometry();
     lg.setAttribute('position', new THREE.Float32BufferAttribute(lines, 3));
     lg.setAttribute('color', new THREE.Float32BufferAttribute(lineColors, 3));
-    this.scene.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ vertexColors: true })));
+    this.level.add(new THREE.LineSegments(lg, this.lineMat));
 
-    this.scene.add(new THREE.HemisphereLight(0xb4c4ff, 0x4a3a5c, 3.4));
-    const sun = new THREE.DirectionalLight(0xfff0dd, 2.6);
-    sun.position.set(500, 900, 300);
-    this.scene.add(sun);
+    // Each map has the same number of lamps. Then the shaders do not compile again after a map change.
+    const k = this.map.size / 1024, far = 900 * k;
     const lamp = (x, y, z, color, power, dist) => {
       const l = new THREE.PointLight(color, power, dist, 0);
       l.position.set(x, y, z);
-      this.scene.add(l);
+      this.level.add(l);
     };
-    lamp(0, 260, 0, 0xd45cff, 2.2, 700);
-    for (const [x, z, c] of [[900, 0, 0xff5a4a], [-900, 0, 0xffc04a], [0, 900, 0x4dff88], [0, -900, 0x4aa8ff]]) lamp(x, 300, z, c, 1.6, 800);
+    lamp(0, 260, 0, 0xd45cff, 2.2, 700 * Math.max(k, 0.7));
+    for (const [x, z, c] of [[far, 0, 0xff5a4a], [-far, 0, 0xffc04a], [0, far, 0x4dff88], [0, -far, 0x4aa8ff]]) lamp(x, 300, z, c, 1.6, 800 * Math.max(k, 0.7));
 
     // Jump pads.
     this.padMats = [];
@@ -223,23 +256,13 @@ export class Renderer {
       const m = new THREE.MeshBasicMaterial({ color: 0x35ffd0 });
       const plate = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.48, w * 0.5, 3, 24), m);
       plate.position.set(p.pos[0], 1.5, p.pos[2]);
-      this.scene.add(plate);
+      this.level.add(plate);
       const ring = new THREE.Mesh(new THREE.TorusGeometry(w * 0.4, 1.5, 6, 24), m);
       ring.rotation.x = Math.PI / 2;
       ring.position.copy(plate.position);
-      this.scene.add(ring);
+      this.level.add(ring);
       this.padMats.push({ m, ring });
     }
-
-    // Stars above the arena.
-    const stars = [];
-    for (let i = 0; i < 700; i++) {
-      const a = Math.random() * Math.PI * 2, h = Math.random() * 0.9 + 0.1, r = 5000;
-      stars.push(Math.cos(a) * r * Math.sqrt(1 - h * h), h * r, Math.sin(a) * r * Math.sqrt(1 - h * h));
-    }
-    const sg = new THREE.BufferGeometry();
-    sg.setAttribute('position', new THREE.Float32BufferAttribute(stars, 3));
-    this.scene.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xbfd0ff, size: 14, fog: false })));
   }
 
   buildItems() {
@@ -276,7 +299,7 @@ export class Renderer {
       }
       m.position.set(it.pos[0], it.pos[1], it.pos[2]);
       m.userData.y = it.pos[1] - (d.kind === 'weapon' || d.kind === 'amp' ? 0 : 8);
-      this.scene.add(m);
+      this.level.add(m);
       return m;
     });
   }

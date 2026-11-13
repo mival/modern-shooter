@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMap } from '../shared/map.js';
+import { buildMap, MAP_IDS } from '../shared/map.js';
+import { checkMap } from '../tools/map-check.mjs';
 import { makeWorld } from '../shared/collision.js';
 import { pmove, newMoveState } from '../shared/pmove.js';
 import { Game } from '../shared/game.js';
@@ -144,17 +145,34 @@ test('the hammer needs no ammo and hits only at close range', () => {
   assert.equal(a.weapon, W_HAMMER);
 });
 
-test('the bots can go from each spawn point to each item', () => {
-  const g = new Game(buildMap(), { seed: 1, spawnProtect: 0 });
-  const nav = buildNav(g);
-  const first = map.items.length;
-  for (let s = 0; s < map.spawns.length; s++) {
-    const seen = new Set([first + s]);
-    const todo = [first + s];
-    while (todo.length) for (const e of nav.nodes[todo.pop()].edges) if (!seen.has(e.to)) { seen.add(e.to); todo.push(e.to); }
-    const missing = map.items.map((it, i) => i).filter((i) => !seen.has(i)).map((i) => map.items[i].type + '@' + map.items[i].pos);
-    assert.deepEqual(missing, [], `spawn ${s}`);
-  }
+test('each map is valid and the bots can go to each item', () => {
+  for (const id of MAP_IDS) assert.deepEqual(checkMap(id).problems, [], id);
+});
+
+test('the host changes the map after a match and keeps the players', () => {
+  const sent = [];
+  const host = new GameHost({ bots: 2, botFill: false, fragLimit: 1, timeLimit: 0, seed: 5, maps: ['yard', 'deck'] });
+  const c = host.connect({ send: (m) => sent.push(m), close() {} });
+  c.message({ t: 'join', name: 'guest' });
+  const id = sent.find((m) => m.t === 'welcome').id;
+  assert.equal(sent.find((m) => m.t === 'welcome').map, 'yard');
+  host.game.endMatch();
+  for (let i = 0; i < 60 * 11; i++) host.step();
+  assert.equal(host.mapId, 'deck');
+  assert.equal(host.game.map.name, 'Twin Deck');
+  assert.equal(sent.filter((m) => m.t === 'map').length, 1);
+  assert.equal(host.game.players.get(id).name, 'guest');
+  assert.equal(host.bots.size, 2);
+  assert.equal(host.game.state, 'play');
+  const snap = sent.filter((m) => m.t === 's').pop();
+  assert.equal(snap.it.length, host.game.items.length);
+  // One map in the rotation: the match starts again on the same map.
+  host.applySettings({ maps: ['deck'] });
+  host.game.endMatch();
+  for (let i = 0; i < 60 * 11; i++) host.step();
+  assert.equal(host.mapId, 'deck');
+  assert.equal(sent.filter((m) => m.t === 'map').length, 1);
+  assert.equal(host.changeMap('nothing'), false);
 });
 
 test('a match with bots runs to the frag limit', () => {

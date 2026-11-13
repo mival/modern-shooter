@@ -23,5 +23,7 @@ services:
       RCON_PASSWORD: "${RCON_PASSWORD:-}"
       FRAG_LIMIT: "20"
       TIME_LIMIT: "10"
+      # Map rotation. The first map starts. Maps: yard, deck.
+      MAPS: "yard,deck"
       # Seconds without damage after a spawn. "0" sets it to off.
       SPAWN_PROTECT: "2"

@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { GameHost } from '../shared/host.js';
 import { TICK_RATE, DEFAULT_PORT } from '../shared/constants.js';
+import { MAPS, MAP_IDS } from '../shared/map.js';
 
 const OPTIONS = {
   port: { env: 'PORT', def: DEFAULT_PORT, help: 'TCP port for HTTP and WebSocket' },
@@ -22,6 +23,7 @@ const OPTIONS = {
   doublejump: { env: 'DOUBLE_JUMP', def: 'off', help: 'on: a player can jump one more time in the air' },
   fraglimit: { env: 'FRAG_LIMIT', def: 20, help: 'Frags that end a match. 0 sets no limit' },
   timelimit: { env: 'TIME_LIMIT', def: 10, help: 'Match time in minutes. 0 sets no limit' },
+  maps: { env: 'MAPS', def: MAP_IDS.join(','), help: `Map rotation, a list with commas. The first map starts. Maps: ${MAP_IDS.join(', ')}` },
   spawnprotect: { env: 'SPAWN_PROTECT', def: 2, help: 'Seconds without damage after a spawn. 0 sets it to off' },
   rconpassword: { env: 'RCON_PASSWORD', def: '', help: 'Password for the remote console, 8 characters or more. Empty sets the remote console to off' },
 };
@@ -49,13 +51,18 @@ function readOptions() {
     }
     return v;
   };
+  const maps = String(o.maps).split(',').map((s) => s.trim()).filter(Boolean);
+  if (!maps.length || maps.some((id) => !Object.hasOwn(MAPS, id))) {
+    console.error(`Option --maps must be a list of these maps: ${MAP_IDS.join(', ')}.`);
+    process.exit(1);
+  }
   const rconPassword = String(o.rconpassword);
   if (rconPassword && rconPassword.length < 8) {
     console.error('Option --rconpassword must have 8 characters or more.');
     process.exit(1);
   }
   return {
-    rconPassword,
+    rconPassword, maps,
     port: num('port', 1, 65535), host: String(o.host), name: String(o.name),
     maxClients: num('maxclients', 1, 32), bots: num('bots', 0, 15), botSkill: num('botskill', 1, 5),
     botFill: !/^(off|0|false|no)$/i.test(String(o.botfill)),
@@ -174,13 +181,13 @@ setInterval(() => {
 // ---------- Commands ----------
 // The local console and the remote console (rcon) use the same commands.
 // "out" is a function that writes one line of the answer.
-const HELP = 'status | bots <count> [skill 1-5] | botfill <on|off> | doublejump <on|off> | fraglimit <n> | timelimit <minutes> | spawnprotect <seconds> | restart | kick <player id> | say <text> | quit';
+const HELP = 'status | bots <count> [skill 1-5] | botfill <on|off> | doublejump <on|off> | fraglimit <n> | timelimit <minutes> | spawnprotect <seconds> | map <id> | nextmap | maps [id,id] | restart | kick <player id> | say <text> | quit';
 const COMMANDS = {
   help(out) { out(HELP); },
   status(out) {
     const s = game.status();
     out(`This minute: ${tickLine()}`);
-    out(`${s.name} | map ${s.map} | players ${s.players}/${s.maxClients} | bots ${s.bots} (${game.botFill ? `fill on: ${game.botCount} players in total` : 'fill off'}, skill ${game.botSkill}) | double jump ${s.doubleJump ? 'on' : 'off'} | frag limit ${game.game.fragLimit} | time limit ${game.game.timeLimit / 60} min | spawn protection ${game.game.spawnProtect} s`);
+    out(`${s.name} | map ${s.map} (${s.mapId}), rotation ${game.rotation.join(',')} | players ${s.players}/${s.maxClients} | bots ${s.bots} (${game.botFill ? `fill on: ${game.botCount} players in total` : 'fill off'}, skill ${game.botSkill}) | double jump ${s.doubleJump ? 'on' : 'off'} | frag limit ${game.game.fragLimit} | time limit ${game.game.timeLimit / 60} min | spawn protection ${game.game.spawnProtect} s`);
     for (const p of game.game.scores()) out(`  ${String(p.id).padStart(3)} ${p.name.padEnd(16)} ${p.bot ? 'bot  ' : 'human'} frags ${p.frags} deaths ${p.deaths}`);
   },
   bots(out, count, skill) {
@@ -214,6 +221,19 @@ const COMMANDS = {
   spawnprotect(out, v) {
     if (v !== undefined) game.applySettings({ spawnProtect: Number(v) });
     out(`Spawn protection: ${game.game.spawnProtect ? game.game.spawnProtect + ' seconds' : 'off'}`);
+  },
+  map(out, id) {
+    if (id === undefined) return out(`Map: ${game.mapId}. Maps: ${MAP_IDS.join(', ')}`);
+    out(game.changeMap(id) ? `Map: ${game.mapId}` : `Unknown map "${id}". Maps: ${MAP_IDS.join(', ')}`);
+  },
+  nextmap(out) { game.changeMap(game.nextMapId()); out(`Map: ${game.mapId}`); },
+  maps(out, list) {
+    if (list !== undefined) {
+      const ids = list.split(',').filter(Boolean);
+      if (!ids.length || ids.some((id) => !Object.hasOwn(MAPS, id))) return out(`Usage: maps <id,id>. Maps: ${MAP_IDS.join(', ')}`);
+      game.applySettings({ maps: ids });
+    }
+    out(`Map rotation: ${game.rotation.join(', ')}`);
   },
   restart(out) { game.game.restart(); out('The match starts again.'); },
   kick(out, id) {
@@ -284,5 +304,5 @@ process.on('SIGTERM', shutdown);
 
 server.listen(opts.port, opts.host, () => {
   log(`${opts.name}: listening on http://${opts.host}:${opts.port}`);
-  log(`Bots ${opts.bots} (skill ${opts.botSkill}, fill ${opts.botFill ? 'on' : 'off'}), frag limit ${opts.fragLimit}, time limit ${opts.timeLimit} min, max clients ${opts.maxClients}, double jump ${opts.doubleJump ? 'on' : 'off'}, remote console ${opts.rconPassword ? 'on' : 'off'}`);
+  log(`Bots ${opts.bots} (skill ${opts.botSkill}, fill ${opts.botFill ? 'on' : 'off'}), frag limit ${opts.fragLimit}, time limit ${opts.timeLimit} min, max clients ${opts.maxClients}, maps ${opts.maps.join(',')}, double jump ${opts.doubleJump ? 'on' : 'off'}, remote console ${opts.rconPassword ? 'on' : 'off'}`);
 });

@@ -1,6 +1,6 @@
 // The game client. It reads the input, predicts the local movement,
 // and shows the state that the game host sends.
-import { buildMap } from '../../shared/map.js';
+import { buildMap, MAP_IDS, MAPS } from '../../shared/map.js';
 import { makeWorld } from '../../shared/collision.js';
 import { pmove, newMoveState, copyMoveState, PMF_JUMPED, PMF_PAD } from '../../shared/pmove.js';
 import { TICK, PM, WEAPONS, ITEMS, GAME_ID, DEFAULT_PORT, W_HAMMER, W_RL } from '../../shared/constants.js';
@@ -12,14 +12,14 @@ import { Perf } from './perf.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-const map = buildMap();
-const world = makeWorld(map);
+let map = buildMap();
+let world = makeWorld(map);
 const canvas = $('view');
 const renderer = new Renderer(canvas, map, world);
 const input = new Input(canvas);
 
 // ---------- Settings ----------
-const settings = { name: 'Player', botsOn: true, botCount: 4, botSkill: 3, fragLimit: 20, timeLimit: 10, address: '', sens: 1.5, fov: 100, volume: 0.5, quality: 'medium', doubleJump: false, perf: false };
+const settings = { name: 'Player', botsOn: true, botCount: 4, botSkill: 3, fragLimit: 20, timeLimit: 10, address: '', sens: 1.5, fov: 100, volume: 0.5, quality: 'medium', doubleJump: false, perf: false, map: 'all' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('slipstream') || '{}')); } catch { /* Storage is not available. */ }
 function saveSettings() {
   try { localStorage.setItem('slipstream', JSON.stringify(settings)); } catch { /* Storage is not available. */ }
@@ -54,6 +54,9 @@ function bindSettings() {
   $('quality').addEventListener('change', () => { settings.quality = $('quality').value; saveSettings(); apply(); });
   $('doublejump').checked = settings.doubleJump;
   $('doublejump').addEventListener('change', () => { settings.doubleJump = $('doublejump').checked; saveSettings(); });
+  $('map').replaceChildren(new Option('All maps, in rotation', 'all'), ...MAP_IDS.map((id) => new Option(MAPS[id]().name, id)));
+  $('map').value = Object.hasOwn(MAPS, settings.map) ? settings.map : 'all';
+  $('map').addEventListener('change', () => { settings.map = $('map').value; saveSettings(); });
   $('perfon').checked = settings.perf;
   $('perfon').addEventListener('change', () => { settings.perf = $('perfon').checked; saveSettings(); apply(); });
   $('botson').checked = settings.botsOn;
@@ -75,6 +78,16 @@ const local = newMoveState();
 const prev = { x: 0, y: 0, z: 0 };
 const smooth = { x: 0, y: 0, z: 0 };
 const camPos = { x: 0, y: 300, z: 0 };
+
+// Loads a map for the prediction and for the view. All state of the old match goes away.
+function loadMap(id) {
+  if (id === map.id) return;
+  const doubleJump = world.doubleJump;
+  map = buildMap(id);
+  world = makeWorld(map);
+  world.doubleJump = doubleJump;
+  renderer.loadMap(map, world);
+}
 
 function leaveGame(message = '') {
   if (conn) conn.close();
@@ -105,6 +118,8 @@ function offlineOptions() {
   return {
     bots: settings.botsOn ? settings.botCount : 0, botSkill: settings.botSkill, botFill: false,
     fragLimit: settings.fragLimit, timeLimit: settings.timeLimit, doubleJump: settings.doubleJump,
+    // "all" plays all maps, one after the other.
+    maps: Object.hasOwn(MAPS, settings.map) ? [settings.map] : MAP_IDS,
   };
 }
 
@@ -144,6 +159,7 @@ function onMessage(m) {
   else if (m.t === 'welcome') {
     if (m.game !== GAME_ID) { leaveGame('This is not a Slipstream Arena server.'); return; }
     myId = m.id; joined = true; fragLimit = m.fragLimit;
+    loadMap(m.map);
     world.doubleJump = !!m.doubleJump;
     seq = 0; pending = [];
     $('hud').hidden = false;
@@ -154,6 +170,14 @@ function onMessage(m) {
     info.clear();
     for (const p of m.players) { info.set(p.id, p); renderer.setName(p.id, p.name); }
     updateScores();
+  } else if (m.t === 'map') {
+    // The server started a new match on a different map.
+    loadMap(m.map);
+    me = null; snaps = []; pending = [];
+    renderer.setPlayers([], 0);
+    renderer.setProjectiles([]);
+    $('feed').replaceChildren();
+    center(map.name, 2500);
   } else if (m.t === 'chat') addChat(m.name, m.text);
   else if (m.t === 'print') addChat(null, m.text);
   else if (m.t === 'cfg') {
