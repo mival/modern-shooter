@@ -8,6 +8,7 @@ import { Renderer, playerColor } from './render.js';
 import { Input } from './input.js';
 import { connectLocal, connectRemote } from './net.js';
 import { play, unlockAudio, setVolume } from './audio.js';
+import { Perf } from './perf.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -18,7 +19,7 @@ const renderer = new Renderer(canvas, map, world);
 const input = new Input(canvas);
 
 // ---------- Settings ----------
-const settings = { name: 'Player', botsOn: true, botCount: 4, botSkill: 3, fragLimit: 20, timeLimit: 10, address: '', sens: 1.5, fov: 100, volume: 0.5, quality: 'medium', doubleJump: false };
+const settings = { name: 'Player', botsOn: true, botCount: 4, botSkill: 3, fragLimit: 20, timeLimit: 10, address: '', sens: 1.5, fov: 100, volume: 0.5, quality: 'medium', doubleJump: false, perf: false };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('slipstream') || '{}')); } catch { /* Storage is not available. */ }
 function saveSettings() {
   try { localStorage.setItem('slipstream', JSON.stringify(settings)); } catch { /* Storage is not available. */ }
@@ -31,6 +32,7 @@ function bindSettings() {
     ['timelimit', 'timeLimit', 0, 600], ['sens', 'sens', 0.1, 6], ['fov', 'fov', 80, 130], ['volume', 'volume', 0, 1]];
   const apply = () => {
     input.sens = settings.sens;
+    perf.setVisible(settings.perf);
     renderer.setFov(settings.fov);
     renderer.setQuality(params.get('quality') || settings.quality);
     setVolume(settings.volume);
@@ -52,10 +54,15 @@ function bindSettings() {
   $('quality').addEventListener('change', () => { settings.quality = $('quality').value; saveSettings(); apply(); });
   $('doublejump').checked = settings.doubleJump;
   $('doublejump').addEventListener('change', () => { settings.doubleJump = $('doublejump').checked; saveSettings(); });
+  $('perfon').checked = settings.perf;
+  $('perfon').addEventListener('change', () => { settings.perf = $('perfon').checked; saveSettings(); apply(); });
   $('botson').checked = settings.botsOn;
   $('botson').addEventListener('change', () => { settings.botsOn = $('botson').checked; saveSettings(); apply(); });
   apply();
 }
+
+const perf = new Perf($('perfgraph'), $('perftext'));
+const frameEvents = [];
 
 // ---------- Session state ----------
 let conn = null, joined = false, myId = 0, me = null;
@@ -182,6 +189,7 @@ const dist = (x, y, z) => Math.hypot(x - camPos.x, y - camPos.y, z - camPos.z);
 const nameOf = (id) => (info.get(id) ? info.get(id).name : 'Player');
 
 function onEvent(e, s) {
+  if (frameEvents.length < 12) frameEvents.push(e.t);
   const a = e.id ? s.pm.get(e.id) : null;
   const d = a ? (e.id === myId ? 0 : dist(a[1], a[2], a[3])) : 0;
   if (e.t === 'shot' && a) {
@@ -377,8 +385,11 @@ function interpolate(now) {
 let lastFrame = performance.now(), acc = 0;
 function frame(now) {
   requestAnimationFrame(frame);
-  const dt = Math.min(0.1, (now - lastFrame) / 1000);
+  const rawDt = now - lastFrame;
+  const dt = Math.min(0.1, rawDt / 1000);
   lastFrame = now;
+  const t0 = performance.now();
+  let ticks = 0;
   frames++;
   if (now - fpsAt >= 1000) { fps = frames; frames = 0; fpsAt = now; }
 
@@ -392,10 +403,12 @@ function frame(now) {
         acc -= TICK;
         clientTick();
         if (conn.local) conn.step();
+        ticks++;
       }
     }
     if (!conn.local && now - lastPing > 2000) { lastPing = now; conn.send({ t: 'ping', n: now, rtt }); }
   }
+  const t1 = performance.now();
   if (joined && me && snaps.length) {
     const k = Math.exp(-dt * 14);
     smooth.x *= k; smooth.y *= k; smooth.z *= k; stepSmooth *= k;
@@ -424,6 +437,31 @@ function frame(now) {
     view.yaw = Math.atan2(view.x, view.z); view.pitch = -0.35;
   }
   renderer.render(dt, view);
+  perf.render(now);
+  perf.frame(rawDt, { sim: t1 - t0, draw: performance.now() - t1, ticks, effects: renderer.effects.length, events: frameEvents.join(' ') });
+  frameEvents.length = 0;
+  // An online client sends a summary to the server each 10 seconds. The server writes it to its log.
+  const summary = perf.takeSummary();
+  if (summary && joined && !conn.local) conn.send({ t: 'perf', fps: summary.fps, low: summary.low, max: summary.max, slow: summary.slow });
+}
+
+// Saves the performance data as a JSON file.
+function savePerfLog() {
+  const gl = renderer.r.getContext();
+  const ext = gl.getExtension('WEBGL_debug_renderer_info');
+  const data = perf.report({
+    saved: new Date().toISOString(), mode: conn ? (conn.local ? 'offline' : 'online') : 'menu',
+    gpu: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'unknown',
+    quality: params.get('quality') || settings.quality, renderSize: `${gl.drawingBufferWidth}x${gl.drawingBufferHeight}`,
+    window: `${innerWidth}x${innerHeight}`, pixelRatio: devicePixelRatio, browser: navigator.userAgent,
+    bots: conn && conn.local ? conn.host.bots.size : null, pingMs: Math.round(rtt),
+  });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
+  a.download = `slipstream-performance-${data.saved.slice(0, 19).replace(/[:T]/g, '-')}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  $('status').textContent = `Saved ${data.slowFrames.length} slow frames to ${a.download}.`;
 }
 
 // ---------- User interface events ----------
@@ -432,6 +470,7 @@ $('offline').addEventListener('click', () => { unlockAudio(); startOffline(); })
 $('connect').addEventListener('click', () => { unlockAudio(); startOnline(settings.address); });
 $('resume').addEventListener('click', () => { hideMenu(); input.lock(); });
 $('leave').addEventListener('click', () => leaveGame());
+$('perfsave').addEventListener('click', savePerfLog);
 $('applybots').addEventListener('click', () => {
   if (!conn || !conn.local) return;
   const o = offlineOptions();
@@ -445,6 +484,7 @@ document.addEventListener('pointerlockchange', () => {
 
 const chat = $('chatinput');
 input.onKey = (code) => {
+  if (code === 'F3') { settings.perf = !settings.perf; $('perfon').checked = settings.perf; perf.setVisible(settings.perf); saveSettings(); }
   if (code === 'Enter' && joined && $('menu').hidden) {
     input.typing = true;
     input.keys.clear();

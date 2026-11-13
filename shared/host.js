@@ -90,6 +90,13 @@ export class GameHost {
       c.chatAt = this.game.time;
       this.broadcast({ t: 'chat', name: c.player.name, text });
       this.log(`<${c.player.name}> ${text}`);
+    } else if (m.t === 'perf') {
+      // A client reports its frame rate. Accept one report each 5 seconds.
+      const v = [m.fps, m.low, m.max, m.slow];
+      if (!c.player || !v.every(Number.isFinite) || this.game.time - (c.perfAt ?? -10) < 5) return;
+      c.perfAt = this.game.time;
+      const [fps, low, max, slow] = v.map((x) => clamp(Math.round(x), 0, 9999));
+      this.log(`perf ${c.player.name}: ${fps} fps average, ${low} fps in the worst 1%, longest frame ${max} ms, ${slow} slow frames in 10 s`);
     } else if (m.t === 'ping') {
       if (Number.isFinite(m.rtt)) c.ping = clamp(Math.round(m.rtt), 0, 999);
       if (Number.isFinite(m.n)) c.transport.send({ t: 'pong', n: m.n });

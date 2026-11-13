@@ -127,6 +127,13 @@ wss.on('connection', (ws, req) => {
 });
 
 // ---------- Game loop ----------
+// Tick time statistics. A tick must take less than 16.7 ms.
+const tickStats = { at: performance.now(), n: 0, sum: 0, max: 0, slow: 0, dropped: 0 };
+function resetTickStats(now) { Object.assign(tickStats, { at: now, n: 0, sum: 0, max: 0, slow: 0, dropped: 0 }); }
+function tickLine() {
+  const s = tickStats;
+  return `ticks: ${s.n}, average ${(s.sum / Math.max(1, s.n)).toFixed(2)} ms, longest ${s.max.toFixed(1)} ms, slow ${s.slow}, dropped ${s.dropped}`;
+}
 const STEP_MS = 1000 / TICK_RATE;
 let last = performance.now(), acc = 0, idle = false;
 setInterval(() => {
@@ -137,8 +144,18 @@ setInterval(() => {
   const nowIdle = game.humanCount() === 0;
   if (nowIdle !== idle) { idle = nowIdle; log(idle ? 'No players. The simulation stops.' : 'The simulation runs.'); }
   if (idle) { acc = 0; return; }
-  if (acc > STEP_MS * 10) acc = STEP_MS * 10;
-  while (acc >= STEP_MS) { game.step(); acc -= STEP_MS; }
+  if (acc > STEP_MS * 10) { tickStats.dropped += Math.floor(acc / STEP_MS) - 10; acc = STEP_MS * 10; }
+  while (acc >= STEP_MS) {
+    const t = performance.now();
+    game.step();
+    const ms = performance.now() - t;
+    tickStats.n++; tickStats.sum += ms;
+    if (ms > tickStats.max) tickStats.max = ms;
+    if (ms > STEP_MS) tickStats.slow++;
+    acc -= STEP_MS;
+  }
+  // Write the tick times to the log one time each minute.
+  if (now - tickStats.at >= 60000) { if (tickStats.n) log(tickLine()); resetTickStats(now); }
 }, 4);
 
 // ---------- Console ----------
@@ -148,6 +165,7 @@ const COMMANDS = {
   },
   status() {
     const s = game.status();
+    console.log(`This minute: ${tickLine()}`);
     console.log(`${s.name} | map ${s.map} | players ${s.players}/${s.maxClients} | bots ${s.bots} (target ${game.botCount}, skill ${game.botSkill}, fill ${game.botFill ? 'on' : 'off'}) | double jump ${s.doubleJump ? 'on' : 'off'}`);
     for (const p of game.game.scores()) console.log(`  ${String(p.id).padStart(3)} ${p.name.padEnd(16)} ${p.bot ? 'bot  ' : 'human'} frags ${p.frags} deaths ${p.deaths}`);
   },

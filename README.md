@@ -77,6 +77,16 @@ The menu has the bot setup for the offline mode:
 
 During an offline game, press Esc, change the setup, and select "Apply bot setup".
 
+## Performance graph
+
+Press F3, or set "Performance graph" in the menu, to show the frame time graph.
+
+- Each column is one frame. A red column is a slow frame.
+- Orange is the simulation, green is the draw code, and grey is the time that the browser and the GPU use.
+- "Save performance log" in the menu saves a JSON file with each slow frame and its cause.
+- An online client sends a summary to the server each 10 seconds. The server writes it to its log as a `perf` line.
+- The server writes its tick times to the log one time each minute. The `status` command shows them also.
+
 ## Graphics quality
 
 The "Graphics" option in the menu limits the render resolution. The default is "Medium" (approximately 1080p).
