@@ -6,7 +6,7 @@ export class Input {
     this.canvas = canvas;
     this.keys = new Set();
     this.yaw = 0; this.pitch = 0;
-    this.sens = 2.2;
+    this.sens = 1.5;
     this.fire = false;
     this.weaponRequest = -1;
     this.wheel = 0;
@@ -26,6 +26,8 @@ export class Input {
     window.addEventListener('blur', () => { this.keys.clear(); this.fire = false; });
     document.addEventListener('mousemove', (e) => {
       if (!this.locked()) return;
+      // Some browsers send one very large movement after the pointer lock starts. Ignore it.
+      if (Math.abs(e.movementX) > 2000 || Math.abs(e.movementY) > 2000) return;
       const k = this.sens * 0.001;
       this.yaw -= e.movementX * k;
       this.pitch = Math.max(-1.55, Math.min(1.55, this.pitch - e.movementY * k));
@@ -42,9 +44,17 @@ export class Input {
 
   locked() { return document.pointerLockElement === this.canvas; }
 
+  // Asks for raw mouse data. Then the pointer acceleration of the operating system does not change the aim.
+  // If the browser does not support raw data, the function asks for the normal pointer lock.
   lock() {
-    const r = this.canvas.requestPointerLock();
-    if (r && r.catch) r.catch(() => {});
+    let r;
+    try { r = this.canvas.requestPointerLock({ unadjustedMovement: true }); } catch { r = null; }
+    if (r && r.catch) {
+      r.catch(() => {
+        const n = this.canvas.requestPointerLock();
+        if (n && n.catch) n.catch(() => {});
+      });
+    }
   }
 
   down(code) { return this.keys.has(code); }

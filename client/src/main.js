@@ -18,7 +18,7 @@ const renderer = new Renderer(canvas, map, world);
 const input = new Input(canvas);
 
 // ---------- Settings ----------
-const settings = { name: 'Player', botsOn: true, botCount: 4, botSkill: 3, fragLimit: 20, timeLimit: 10, address: '', sens: 2.2, fov: 100, volume: 0.5, quality: 'medium', doubleJump: false };
+const settings = { name: 'Player', botsOn: true, botCount: 4, botSkill: 3, fragLimit: 20, timeLimit: 10, address: '', sens: 1.5, fov: 100, volume: 0.5, quality: 'medium', doubleJump: false };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('slipstream') || '{}')); } catch { /* Storage is not available. */ }
 function saveSettings() {
   try { localStorage.setItem('slipstream', JSON.stringify(settings)); } catch { /* Storage is not available. */ }
@@ -28,14 +28,14 @@ const num = (v, lo, hi, def) => { const n = Number(v); return Number.isFinite(n)
 function bindSettings() {
   const text = [['name', 'name'], ['address', 'address']];
   const numbers = [['botcount', 'botCount', 1, 15], ['botskill', 'botSkill', 1, 5], ['fraglimit', 'fragLimit', 0, 1000],
-    ['timelimit', 'timeLimit', 0, 600], ['sens', 'sens', 0.3, 6], ['fov', 'fov', 80, 130], ['volume', 'volume', 0, 1]];
+    ['timelimit', 'timeLimit', 0, 600], ['sens', 'sens', 0.1, 6], ['fov', 'fov', 80, 130], ['volume', 'volume', 0, 1]];
   const apply = () => {
     input.sens = settings.sens;
     renderer.setFov(settings.fov);
     renderer.setQuality(params.get('quality') || settings.quality);
     setVolume(settings.volume);
     $('botskillv').textContent = settings.botSkill;
-    $('sensv').textContent = settings.sens.toFixed(1);
+    $('sensv').textContent = settings.sens.toFixed(2);
     $('fovv').textContent = settings.fov;
     $('volumev').textContent = Math.round(settings.volume * 100) + '%';
     $('botcount').disabled = $('botskill').disabled = !settings.botsOn;
@@ -317,7 +317,7 @@ function clientTick() {
     input.wheel = 0;
   }
   if (input.typing || !$('menu').hidden) { cmd.fwd = 0; cmd.side = 0; cmd.buttons = 0; cmd.weapon = -1; }
-  conn.send({ t: 'c', c: [[cmd.seq, cmd.fwd, cmd.side, cmd.buttons, cmd.yaw, cmd.pitch, cmd.weapon]] });
+  conn.send({ t: 'c', c: [[cmd.seq, cmd.fwd, cmd.side, cmd.buttons, cmd.yaw, cmd.pitch, cmd.weapon, viewTime]] });
   pending.push(cmd);
   if (pending.length > 120) pending.shift();
   prev.x = local.x; prev.y = local.y; prev.z = local.z;
@@ -339,6 +339,8 @@ function lerpAngle(a, b, k) {
   return a + d * k;
 }
 
+let viewTime = 0;
+
 // Finds the positions of the other players for the render time.
 function interpolate(now) {
   const rt = now - (conn.local ? 34 : 75);
@@ -349,6 +351,8 @@ function interpolate(now) {
   }
   if (a.rt > b.rt) a = b;
   const k = b.rt > a.rt ? Math.max(0, Math.min(1, (rt - a.rt) / (b.rt - a.rt))) : 0;
+  // The server uses this time to put the targets where this client sees them.
+  viewTime = a.time + (b.time - a.time) * k;
   const list = [];
   for (const q of b.p) {
     const o = a.pm.get(q[0]) || q;

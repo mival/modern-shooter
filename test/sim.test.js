@@ -6,7 +6,7 @@ import { pmove, newMoveState } from '../shared/pmove.js';
 import { Game } from '../shared/game.js';
 import { GameHost } from '../shared/host.js';
 import { buildNav } from '../shared/bot.js';
-import { TICK, PM, BTN_JUMP, BTN_FIRE, W_RL, W_HAMMER, W_MG } from '../shared/constants.js';
+import { TICK, PM, BTN_JUMP, BTN_FIRE, W_RL, W_HAMMER, W_MG, W_RAIL } from '../shared/constants.js';
 
 const map = buildMap();
 const world = makeWorld(map);
@@ -180,4 +180,26 @@ test('the host handles a client and bad messages', () => {
   assert.equal(host.bots.size, 0);
   c.close();
   assert.equal(host.game.players.size, 0);
+});
+
+test('lag compensation hits a target at its position in the past', () => {
+  const run = (useViewTime) => {
+    const g = new Game(buildMap(), { seed: 1 });
+    const a = g.addPlayer(1, 'a'), b = g.addPlayer(2, 'b');
+    // Player "a" looks along -z. Player "b" crosses the line of fire.
+    a.x = 0; a.y = 24; a.z = 700; a.weapons |= 1 << W_RAIL; a.ammo[W_RAIL] = 5; a.weapon = a.wantWeapon = W_RAIL;
+    b.x = -100; b.y = 24; b.z = 400;
+    let seenAt = 0;
+    for (let i = 0; i < 40; i++) {
+      g.runCmd(b, cmd({ side: 1, yaw: 0 }));
+      g.tick();
+      if (!seenAt && Math.abs(b.x) < 2) seenAt = g.time;
+    }
+    assert.ok(seenAt > 0 && Math.abs(b.x) > 40, `target position ${b.x}`);
+    const health = b.health;
+    g.runCmd(a, cmd({ buttons: BTN_FIRE, yaw: 0, weapon: -1, vt: useViewTime ? seenAt : 0 }));
+    return health - b.health;
+  };
+  assert.equal(run(false), 0);
+  assert.ok(run(true) > 0);
 });

@@ -8,6 +8,10 @@ import { makeWorld, traceBox, rayBox, newTrace } from './collision.js';
 import { pmove, PMF_JUMPED, PMF_PAD } from './pmove.js';
 
 const tr = newTrace();
+const past = { x: 0, y: 0, z: 0 };
+// The server moves targets back in time by this maximum, in seconds.
+const MAX_REWIND = 0.3;
+const HISTORY = 24;
 const r1 = (v) => Math.round(v * 10) / 10;
 const r3 = (v) => Math.round(v * 1000) / 1000;
 
@@ -97,13 +101,35 @@ export class Game {
     p.weaponTime = 0; p.beam = false; p.amp = 0;
     p.dead = false;
     p.spawnCount++;
+    p.hist = [];
     this.events.push({ t: 'spawn', id: p.id });
+  }
+
+  // Returns the position of a player at a time in the past.
+  // The result is a shared object. Use it before the next call.
+  posAt(q, time) {
+    const h = q.hist;
+    past.x = q.x; past.y = q.y; past.z = q.z;
+    if (!h || !h.length || time >= h[h.length - 1].t) return past;
+    for (let i = h.length - 1; i > 0; i--) {
+      const a = h[i - 1], b = h[i];
+      if (time >= a.t) {
+        const k = (time - a.t) / (b.t - a.t);
+        past.x = a.x + (b.x - a.x) * k; past.y = a.y + (b.y - a.y) * k; past.z = a.z + (b.z - a.z) * k;
+        return past;
+      }
+    }
+    past.x = h[0].x; past.y = h[0].y; past.z = h[0].z;
+    return past;
   }
 
   // Runs one input command of a player.
   runCmd(p, cmd) {
     if (this.state !== 'play') return;
     p.yaw = cmd.yaw; p.pitch = cmd.pitch;
+    // Lag compensation: "viewTime" is the game time that the client showed when the player fired.
+    // Hitscan weapons test the targets at their positions at that time.
+    p.viewTime = cmd.vt > 0 ? Math.max(this.time - MAX_REWIND, Math.min(this.time, cmd.vt)) : this.time;
     if (p.dead) {
       if (this.time >= p.respawnAt && (cmd.buttons & (BTN_FIRE | BTN_JUMP))) this.spawn(p);
       return;
@@ -180,11 +206,12 @@ export class Game {
     traceBox(this.world, ox, oy, oz, ox + ex, oy + ey, oz + ez, 0, 0, 0, tr);
     const wall = tr.f;
     const hits = [];
-    for (const q of this.players.values()) {
-      if (q === p || q.dead) continue;
+    for (const o of this.players.values()) {
+      if (o === p || o.dead) continue;
+      const q = this.posAt(o, p.viewTime ?? this.time);
       const t = rayBox(ox, oy, oz, ex, ey, ez,
         q.x - PM.hx, q.y + PM.minY, q.z - PM.hx, q.x + PM.hx, q.y + PM.maxY, q.z + PM.hx);
-      if (t >= 0 && t < wall) hits.push({ q, t });
+      if (t >= 0 && t < wall) hits.push({ q: o, t });
     }
     hits.sort((a, b) => a.t - b.t);
     return { wall, hits };
@@ -204,11 +231,12 @@ export class Game {
       const ex = fx * def.range, ey = fy * def.range, ez = fz * def.range;
       traceBox(this.world, ox, oy, oz, ox + ex, oy + ey, oz + ez, 0, 0, 0, tr);
       let best = tr.f, victim = null;
-      for (const q of this.players.values()) {
-        if (q === p || q.dead) continue;
+      for (const o of this.players.values()) {
+        if (o === p || o.dead) continue;
+        const q = this.posAt(o, p.viewTime ?? this.time);
         const t = rayBox(ox, oy, oz, ex, ey, ez,
           q.x - PM.hx - 10, q.y + PM.minY - 10, q.z - PM.hx - 10, q.x + PM.hx + 10, q.y + PM.maxY + 10, q.z + PM.hx + 10);
-        if (t >= 0 && t <= best) { best = t; victim = q; }
+        if (t >= 0 && t <= best) { best = t; victim = o; }
       }
       if (victim) { ev.h = 1; this.damage(victim, p, def.damage, fx, fy, fz, p.weapon); }
     } else if (def.kind === 'bullet') {
@@ -343,6 +371,11 @@ export class Game {
     }
     const second = Math.floor(this.time) !== before;
     for (const p of this.players.values()) {
+      // Keep a short position history for the lag compensation.
+      if (!p.dead) {
+        p.hist.push({ t: this.time, x: p.x, y: p.y, z: p.z });
+        if (p.hist.length > HISTORY) p.hist.shift();
+      }
       if (p.dead) {
         if (this.time >= p.deadAt + RESPAWN_FORCE) this.spawn(p);
         continue;

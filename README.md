@@ -171,7 +171,10 @@ Useful URL parameters: `?offline` starts an offline game, `?connect=ws://host:27
 - The client shows the other players a short time in the past and interpolates between two snapshots.
 - The transport is WebSocket (TCP) with JSON messages, because a browser cannot use UDP sockets.
   A bad connection with packet loss can cause short stops.
-- The server does not compensate hitscan weapons for latency. With a high ping, aim ahead of the target.
+- The server compensates hitscan weapons for latency. Each command has the game time that the client showed.
+  The server tests the targets at their positions at that time, to a maximum of 0.3 seconds in the past.
+- Rockets and plasma have no compensation. Aim ahead of the target with these weapons.
+- The client asks the browser for raw mouse data. Then the pointer acceleration of the operating system does not change the aim.
 
 ### Native client
 

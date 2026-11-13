@@ -76,10 +76,11 @@ export class GameHost {
     } else if (m.t === 'c') {
       if (!c.player || !Array.isArray(m.c) || m.c.length > 8) return;
       for (const a of m.c) {
-        if (!Array.isArray(a) || a.length !== 7 || !a.every(Number.isFinite)) continue;
+        if (!Array.isArray(a) || (a.length !== 7 && a.length !== 8) || !a.every(Number.isFinite)) continue;
         c.queue.push({
           seq: a[0] | 0, fwd: clamp(a[1], -1, 1), side: clamp(a[2], -1, 1), buttons: a[3] & 3,
           yaw: a[4] % (Math.PI * 2), pitch: clamp(a[5], -1.55, 1.55), weapon: clamp(a[6] | 0, -1, WEAPONS.length - 1),
+          vt: a.length === 8 ? a[7] : 0,
         });
       }
       if (c.queue.length > MAX_QUEUE) c.queue.splice(0, c.queue.length - MAX_QUEUE);
