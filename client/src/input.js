@@ -67,7 +67,8 @@ export class Input {
       fwd: k('KeyW', 'ArrowUp') - k('KeyS', 'ArrowDown'),
       side: k('KeyD', 'ArrowRight') - k('KeyA', 'ArrowLeft'),
       buttons: (this.fire || this.down('ControlLeft') ? BTN_FIRE : 0) | (this.down('Space') ? BTN_JUMP : 0),
-      yaw: this.yaw % (Math.PI * 2), pitch: this.pitch,
+      // The network format has 32-bit angles. Use the same values for the prediction.
+      yaw: Math.fround(this.yaw % (Math.PI * 2)), pitch: Math.fround(this.pitch),
       weapon: this.weaponRequest,
     };
     this.weaponRequest = -1;

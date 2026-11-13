@@ -5,6 +5,7 @@ import { Game } from './game.js';
 import { buildMap, MAPS, DEFAULT_MAP } from './map.js';
 import { Bot, buildNav } from './bot.js';
 import { TICK, TICK_RATE, SNAP_EVERY, GAME_ID, BOT_NAMES, WEAPONS } from './constants.js';
+import { PROTOCOL } from './codec.js';
 
 const MAX_QUEUE = 20;
 const MAX_CMDS_PER_TICK = 3;
@@ -77,6 +78,12 @@ export class GameHost {
     if (!m || typeof m !== 'object') return;
     if (m.t === 'join') {
       if (c.player) return;
+      // A client with a different message format cannot play. The browser has an old copy of the page.
+      if (m.proto !== PROTOCOL) {
+        c.transport.send({ t: 'error', text: 'The game client is not the same version as the server. Load the page again.' });
+        c.transport.close();
+        return;
+      }
       if (this.humanCount() >= this.maxClients) {
         c.transport.send({ t: 'error', text: 'The server is full.' });
         c.transport.close();

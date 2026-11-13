@@ -11,6 +11,7 @@ import { WebSocketServer } from 'ws';
 import { GameHost } from '../shared/host.js';
 import { TICK_RATE, DEFAULT_PORT } from '../shared/constants.js';
 import { MAPS, MAP_IDS } from '../shared/map.js';
+import { encodeSnapshot, decodeCmds } from '../shared/codec.js';
 
 const OPTIONS = {
   port: { env: 'PORT', def: DEFAULT_PORT, help: 'TCP port for HTTP and WebSocket' },
@@ -159,7 +160,9 @@ wss.on('connection', (ws, req) => {
       if (ws.readyState !== ws.OPEN) return;
       // Stop a client that does not read its data.
       if (ws.bufferedAmount > MAX_BUFFER) { ws.terminate(); return; }
-      ws.send(JSON.stringify(m));
+      // Snapshots go as binary data. All other messages are JSON text.
+      if (m.t === 's') ws.send(encodeSnapshot(m), { binary: true });
+      else ws.send(JSON.stringify(m));
     },
     close() { ws.close(); },
   });
@@ -167,7 +170,12 @@ wss.on('connection', (ws, req) => {
   // Close a connection that does not join in 10 seconds.
   const timer = setTimeout(() => { if (!joined) ws.close(); }, 10000);
   ws.on('message', (data, binary) => {
-    if (binary) return;
+    if (binary) {
+      // Binary data from a client is a list of input commands.
+      const list = decodeCmds(data);
+      if (list) handle.message({ t: 'c', c: list });
+      return;
+    }
     let m;
     try { m = JSON.parse(data.toString()); } catch { return; }
     if (m && m.t === 'rcon') {

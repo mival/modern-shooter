@@ -9,6 +9,7 @@ import { Input } from './input.js';
 import { connectLocal, connectRemote } from './net.js';
 import { play, unlockAudio, setVolume } from './audio.js';
 import { Perf } from './perf.js';
+import { PROTOCOL } from '../../shared/codec.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -128,7 +129,7 @@ function offlineOptions() {
 function startOffline() {
   leaveGame();
   conn = connectLocal(offlineOptions(), { message: onMessage });
-  conn.send({ t: 'join', name: settings.name });
+  conn.send({ t: 'join', proto: PROTOCOL, name: settings.name });
 }
 
 function startOnline(address) {
@@ -144,7 +145,7 @@ function startOnline(address) {
   let c;
   try {
     c = connectRemote(url, {
-      open: () => c.send({ t: 'join', name: settings.name }),
+      open: () => c.send({ t: 'join', proto: PROTOCOL, name: settings.name }),
       message: (m) => { if (conn === c) onMessage(m); },
       close: () => { if (conn === c) leaveGame(joined ? 'The connection closed.' : 'Could not connect to the server.'); },
     });

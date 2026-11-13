@@ -6,6 +6,7 @@ import { makeWorld } from '../shared/collision.js';
 import { pmove, newMoveState } from '../shared/pmove.js';
 import { Game } from '../shared/game.js';
 import { GameHost } from '../shared/host.js';
+import { PROTOCOL, encodeSnapshot, decodeSnapshot, encodeCmds, decodeCmds } from '../shared/codec.js';
 import { buildNav } from '../shared/bot.js';
 import { TICK, PM, BTN_JUMP, BTN_FIRE, W_RL, W_HAMMER, W_MG, W_RAIL } from '../shared/constants.js';
 
@@ -153,7 +154,7 @@ test('the host changes the map after a match and keeps the players', () => {
   const sent = [];
   const host = new GameHost({ bots: 2, botFill: false, fragLimit: 1, timeLimit: 0, seed: 5, maps: ['yard', 'deck'] });
   const c = host.connect({ send: (m) => sent.push(m), close() {} });
-  c.message({ t: 'join', name: 'guest' });
+  c.message({ t: 'join', proto: PROTOCOL, name: 'guest' });
   const id = sent.find((m) => m.t === 'welcome').id;
   assert.equal(sent.find((m) => m.t === 'welcome').map, 'yard');
   host.game.endMatch();
@@ -198,7 +199,7 @@ test('the host handles a client and bad messages', () => {
   const host = new GameHost({ bots: 2, seed: 3 });
   assert.equal(host.bots.size, 2);
   const c = host.connect({ send: (m) => sent.push(m), close() {} });
-  c.message(null); c.message({ t: 'c', c: [[1, 2, 3]] }); c.message({ t: 'join', name: 'x'.repeat(50) + '\n' });
+  c.message(null); c.message({ t: 'c', c: [[1, 2, 3]] }); c.message({ t: 'join', proto: PROTOCOL, name: 'x'.repeat(50) + '\n' });
   assert.equal(host.bots.size, 1);
   c.message({ t: 'c', c: [[1, 9, NaN, 3, 0, 0, 0], [2, 9, -9, 3, 0, 99, 77]] });
   for (let i = 0; i < 4; i++) host.step();
@@ -241,7 +242,7 @@ test('the host removes a human player with kick', () => {
   let closed = false;
   const host = new GameHost({ bots: 1, botFill: false, seed: 4 });
   const c = host.connect({ send: (m) => sent.push(m), close() { closed = true; } });
-  c.message({ t: 'join', name: 'guest' });
+  c.message({ t: 'join', proto: PROTOCOL, name: 'guest' });
   const id = sent.find((m) => m.t === 'welcome').id;
   const botId = [...host.bots.keys()][0];
   assert.equal(host.kick(botId), null);
@@ -274,7 +275,7 @@ test('players vote to change a setting', () => {
   const join = (name) => {
     const sent = [];
     const c = host.connect({ send: (m) => sent.push(m), close() {} });
-    c.message({ t: 'join', name });
+    c.message({ t: 'join', proto: PROTOCOL, name });
     return { c, sent, prints: () => sent.filter((m) => m.t === 'print').map((m) => m.text) };
   };
   const a = join('a'), b = join('b'), d = join('d');
@@ -310,4 +311,35 @@ test('players vote to change a setting', () => {
   host.applySettings({ votes: false });
   d.c.message({ t: 'vote', cmd: 'restart' });
   assert.match(d.prints().pop(), /Votes are off/);
+});
+
+test('the binary format keeps all values of a snapshot and of the input commands', () => {
+  const sent = [];
+  const host = new GameHost({ bots: 5, botSkill: 5, botFill: false, seed: 9 });
+  const c = host.connect({ send: (m) => sent.push(m), close() {} });
+  c.message({ t: 'join', proto: PROTOCOL, name: 'guest' });
+  let json = 0, binary = 0, count = 0;
+  for (let i = 0; i < 60 * 20; i++) {
+    c.message({ t: 'c', c: decodeCmds(encodeCmds([[i + 1, 1, -1, 3, Math.fround(1.2345678), Math.fround(-0.3), -1, i / 60]])) });
+    host.step();
+  }
+  for (const m of sent.filter((x) => x.t === 's')) {
+    const data = encodeSnapshot(m);
+    // The binary format must give the same object as the JSON format gave before.
+    assert.deepEqual(decodeSnapshot(data), JSON.parse(JSON.stringify(m)));
+    json += JSON.stringify(m).length; binary += data.length; count++;
+  }
+  assert.ok(count > 500);
+  assert.ok(binary < json / 2, `binary ${binary}, JSON ${json}`);
+  console.log(`snapshot size: JSON ${Math.round(json / count)} bytes, binary ${Math.round(binary / count)} bytes`);
+  // The commands arrive with the same values.
+  assert.deepEqual(decodeCmds(encodeCmds([[7, 1, 0, 1, Math.fround(2.5), Math.fround(-1.25), 3, 12.5]])), [[7, 1, 0, 1, Math.fround(2.5), Math.fround(-1.25), 3, 12.5]]);
+  assert.equal(decodeCmds(new Uint8Array([2, 9])), null);
+  assert.equal(decodeCmds(new Uint8Array([1, 0])), null);
+  // An old client cannot join.
+  const old = [];
+  let closed = false;
+  host.connect({ send: (m) => old.push(m), close() { closed = true; } }).message({ t: 'join', name: 'old' });
+  assert.ok(closed);
+  assert.equal(old[0].t, 'error');
 });
