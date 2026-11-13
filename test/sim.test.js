@@ -268,3 +268,46 @@ test('spawn protection stops damage until the player fires', () => {
   g.damage(a, b, 50, 1, 0, 0, W_MG);
   assert.equal(a.health, 75 - 2);
 });
+
+test('players vote to change a setting', () => {
+  const host = new GameHost({ bots: 0, seed: 6, maps: ['yard', 'deck'] });
+  const join = (name) => {
+    const sent = [];
+    const c = host.connect({ send: (m) => sent.push(m), close() {} });
+    c.message({ t: 'join', name });
+    return { c, sent, prints: () => sent.filter((m) => m.t === 'print').map((m) => m.text) };
+  };
+  const a = join('a'), b = join('b'), d = join('d');
+  a.c.message({ t: 'vote', cmd: 'map nothing' });
+  assert.match(a.prints().pop(), /^Votes:/);
+  assert.equal(host.vote, null);
+  // One yes of three players is not sufficient.
+  a.c.message({ t: 'vote', cmd: 'map deck' });
+  assert.ok(host.vote);
+  assert.equal(host.mapId, 'yard');
+  b.c.message({ t: 'vote', cmd: 'restart' });
+  assert.match(b.prints().pop(), /A vote is open/);
+  // The second yes gives more than half.
+  b.c.message({ t: 'vote', v: 1 });
+  assert.equal(host.vote, null);
+  assert.equal(host.mapId, 'deck');
+  // A player must wait before the next vote. Two "no" votes of three players close the vote.
+  a.c.message({ t: 'vote', cmd: 'fraglimit 5' });
+  assert.match(a.prints().pop(), /^Wait/);
+  b.c.message({ t: 'vote', cmd: 'fraglimit 5' });
+  a.c.message({ t: 'vote', v: 0 });
+  assert.ok(host.vote);
+  d.c.message({ t: 'vote', v: 0 });
+  assert.equal(host.vote, null);
+  assert.equal(host.game.fragLimit, 20);
+  // A vote closes after its time.
+  d.c.message({ t: 'vote', cmd: 'bots 3 2' });
+  for (let i = 0; i < 60 * 31; i++) host.step();
+  assert.equal(host.vote, null);
+  assert.equal(host.bots.size, 0);
+  assert.match(d.prints().pop(), /The vote failed/);
+  // Votes can be off.
+  host.applySettings({ votes: false });
+  d.c.message({ t: 'vote', cmd: 'restart' });
+  assert.match(d.prints().pop(), /Votes are off/);
+});

@@ -126,6 +126,7 @@ The server stops the simulation when no human player is connected.
 | `--fraglimit` | `FRAG_LIMIT` | 20 | Frags that end a match. 0 sets no limit. |
 | `--timelimit` | `TIME_LIMIT` | 10 | Match time in minutes. 0 sets no limit. |
 | `--maps` | `MAPS` | yard,deck | Map rotation, a list with commas. The first map starts. After each match, the server goes to the next map. |
+| `--votes` | `VOTES` | on | `on`: players can vote to change the map and other settings. |
 | `--spawnprotect` | `SPAWN_PROTECT` | 2 | Seconds without damage after a spawn. The protection stops when the player fires. 0 sets it to off. |
 | `--rconpassword` | `RCON_PASSWORD` | empty | Password for the remote console, 8 characters or more. Empty sets it to off. |
 
@@ -146,12 +147,35 @@ Type these commands in the terminal of the server:
 | `map <id>` | Start a new match on a map immediately. |
 | `nextmap` | Go to the next map of the rotation. |
 | `maps [id,id]` | Show or set the map rotation. |
+| `votes <on\|off>` | Let the players vote, or not. |
 | `restart` | Start the match again. |
 | `kick <player id>` | Remove a human player. The `status` command shows the ids. |
 | `say <text>` | Send a message to all players. |
 | `quit` | Stop the server. |
 
 Set `SERVER_CONSOLE=1` to use the console when the input is not a terminal.
+
+### Votes
+
+A player can ask for a change without the remote console password. In the game, press Enter and type:
+
+```
+/vote map deck
+/vote bots 4 2
+/yes
+```
+
+| Vote | Change |
+| --- | --- |
+| `restart` | Start the match again. |
+| `nextmap`, `map <id>` | Change the map. |
+| `bots <count> [skill]` | Set the number of bots. |
+| `doublejump <on\|off>` | Set the double jump. |
+| `fraglimit <n>`, `timelimit <minutes>` | Change the match limits. |
+
+- The other players answer with `/yes` or `/no`, or with the keys F1 and F2.
+- The vote passes when more than half of the human players say yes. It fails after 30 seconds.
+- A player must wait 30 seconds before the player can start a new vote.
 
 ### Remote console (rcon)
 

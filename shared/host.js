@@ -9,6 +9,10 @@ import { TICK, TICK_RATE, SNAP_EVERY, GAME_ID, BOT_NAMES, WEAPONS } from './cons
 const MAX_QUEUE = 20;
 const MAX_CMDS_PER_TICK = 3;
 const MAX_BOTS = 15;
+// A vote stays open for this time in seconds.
+const VOTE_TIME = 30;
+// A player must wait this time in seconds between two votes that the player starts.
+const VOTE_WAIT = 30;
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
@@ -40,6 +44,9 @@ export class GameHost {
     this.rotation = cleanMaps(opts.maps) || [DEFAULT_MAP];
     this.mapId = this.rotation[0];
     this.seed = opts.seed;
+    // Players can vote to change settings. "vote" is the open vote, or null.
+    this.votesOn = opts.votes ?? true;
+    this.vote = null;
     this.game = new Game(buildMap(this.mapId), opts);
     this.nav = null;
     this.clients = new Set();
@@ -58,7 +65,7 @@ export class GameHost {
   // A transport calls this function for a new connection.
   // "transport" has the functions send(object) and close().
   connect(transport) {
-    const c = { transport, player: null, queue: [], lastSeq: 0, chatAt: -10, ping: 0 };
+    const c = { transport, player: null, queue: [], lastSeq: 0, chatAt: -10, ping: 0, voteAt: -VOTE_WAIT };
     this.clients.add(c);
     return {
       message: (m) => this.onMessage(c, m),
@@ -103,6 +110,14 @@ export class GameHost {
       c.chatAt = this.game.time;
       this.broadcast({ t: 'chat', name: c.player.name, text });
       this.log(`<${c.player.name}> ${text}`);
+    } else if (m.t === 'vote') {
+      if (!c.player) return;
+      if (typeof m.cmd === 'string') this.callVote(c, cleanText(m.cmd, 60));
+      else if (this.vote && (m.v === 0 || m.v === 1)) {
+        this.vote.yes.delete(c); this.vote.no.delete(c);
+        (m.v ? this.vote.yes : this.vote.no).add(c);
+        this.checkVote();
+      }
     } else if (m.t === 'perf') {
       // A client reports its frame rate. Accept one report each 5 seconds.
       const v = [m.fps, m.low, m.max, m.slow];
@@ -124,6 +139,7 @@ export class GameHost {
       this.print(`${c.player.name} left the arena`);
       c.player = null;
       this.balanceBots();
+      if (this.vote) { this.vote.yes.delete(c); this.vote.no.delete(c); this.checkVote(); }
     }
   }
 
@@ -163,6 +179,65 @@ export class GameHost {
     this.broadcast({ t: 'cfg', doubleJump: this.game.world.doubleJump });
   }
 
+  // The time of the host in seconds. It does not start again after a map change.
+  now() {
+    return this.ticks / TICK_RATE;
+  }
+
+  // Changes the words of a vote into a label and an action. Returns a text if the words are not valid.
+  parseVote(words) {
+    const [name, a, b] = words;
+    const n = Number(a), onOff = a === 'on' || a === 'off';
+    const int = (lo, hi) => a !== undefined && Number.isInteger(n) && n >= lo && n <= hi;
+    if (name === 'restart') return { label: 'restart the match', run: () => this.game.restart() };
+    if (name === 'nextmap') return { label: 'go to the next map', run: () => this.changeMap(this.nextMapId()) };
+    if (name === 'map' && Object.hasOwn(MAPS, a ?? '')) return { label: `change the map to ${a}`, run: () => this.changeMap(a) };
+    if (name === 'bots' && int(0, MAX_BOTS) && (b === undefined || (Number.isInteger(Number(b)) && b >= 1 && b <= 5))) {
+      const skill = b === undefined ? undefined : Number(b);
+      return { label: `set ${n} bots${skill ? ' with skill ' + skill : ''}`, run: () => this.applySettings({ bots: n, botSkill: skill, botFill: false }) };
+    }
+    if (name === 'doublejump' && onOff) return { label: `set the double jump to ${a}`, run: () => this.applySettings({ doubleJump: a === 'on' }) };
+    if (name === 'fraglimit' && int(0, 1000)) return { label: `set the frag limit to ${n}`, run: () => this.applySettings({ fragLimit: n }) };
+    if (name === 'timelimit' && int(0, 600)) return { label: `set the time limit to ${n} minutes`, run: () => this.applySettings({ timeLimit: n }) };
+    return `Votes: restart, nextmap, map <${Object.keys(MAPS).join('|')}>, bots <0-${MAX_BOTS}> [skill 1-5], doublejump <on|off>, fraglimit <n>, timelimit <minutes>`;
+  }
+
+  callVote(c, text) {
+    const tell = (t) => c.transport.send({ t: 'print', text: t });
+    if (!this.votesOn) return tell('Votes are off on this server.');
+    if (this.vote) return tell('A vote is open. Type /yes or /no.');
+    const wait = Math.ceil(c.voteAt + VOTE_WAIT - this.now());
+    if (wait > 0) return tell(`Wait ${wait} seconds before the next vote.`);
+    const action = this.parseVote(text.split(/\s+/).filter(Boolean));
+    if (typeof action === 'string') return tell(action);
+    c.voteAt = this.now();
+    this.vote = { ...action, yes: new Set([c]), no: new Set(), end: this.now() + VOTE_TIME };
+    this.log(`${c.player.name} called a vote: ${action.label}`);
+    this.print(`${c.player.name} called a vote: ${action.label}. Type /yes or /no (keys F1 and F2).`);
+    this.checkVote();
+  }
+
+  // Closes the vote if more than half of the human players said yes, or if that is not possible anymore.
+  checkVote(timeout = false) {
+    const v = this.vote;
+    if (!v) return;
+    const humans = this.humanCount();
+    if (v.yes.size * 2 > humans && humans > 0) {
+      this.vote = null;
+      this.broadcast({ t: 'vote', text: '' });
+      this.log(`The vote passed: ${v.label}`);
+      this.print(`The vote passed: ${v.label}`);
+      v.run();
+    } else if (timeout || v.no.size * 2 >= humans) {
+      this.vote = null;
+      this.broadcast({ t: 'vote', text: '' });
+      this.log(`The vote failed: ${v.label}`);
+      this.print(`The vote failed: ${v.label}`);
+    } else {
+      this.broadcast({ t: 'vote', text: v.label, yes: v.yes.size, no: v.no.size, left: Math.ceil(v.end - this.now()) });
+    }
+  }
+
   // Starts a new match on the given map. The players stay connected.
   changeMap(id) {
     if (!Object.hasOwn(MAPS, id)) return false;
@@ -200,7 +275,7 @@ export class GameHost {
     return {
       bots: this.botCount, botSkill: this.botSkill, botFill: this.botFill,
       doubleJump: g.world.doubleJump, fragLimit: g.fragLimit, timeLimit: g.timeLimit / 60,
-      spawnProtect: g.spawnProtect, maps: this.rotation.slice(),
+      spawnProtect: g.spawnProtect, maps: this.rotation.slice(), votes: this.votesOn,
     };
   }
 
@@ -221,6 +296,7 @@ export class GameHost {
     if (int(v.timeLimit, 0, 600)) g.timeLimit = v.timeLimit * 60;
     if (Number.isFinite(v.spawnProtect) && v.spawnProtect >= 0 && v.spawnProtect <= 10) g.spawnProtect = v.spawnProtect;
     if (cleanMaps(v.maps)) this.rotation = cleanMaps(v.maps);
+    if (typeof v.votes === 'boolean') this.votesOn = v.votes;
     const changed = JSON.stringify(this.getSettings()) !== before;
     if (changed && notify && this.onSettings) this.onSettings(this.getSettings());
     return changed;
@@ -256,6 +332,7 @@ export class GameHost {
       }
     }
     for (const bot of this.bots.values()) g.runCmd(bot.p, bot.think());
+    if (this.vote && this.now() >= this.vote.end) this.checkVote(true);
     // At the end of the intermission, go to the next map of the rotation.
     if (g.state === 'intermission' && g.time + TICK >= g.stateEnd && this.nextMapId() !== this.mapId) {
       this.changeMap(this.nextMapId());

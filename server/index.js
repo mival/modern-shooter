@@ -24,6 +24,7 @@ const OPTIONS = {
   fraglimit: { env: 'FRAG_LIMIT', def: 20, help: 'Frags that end a match. 0 sets no limit' },
   timelimit: { env: 'TIME_LIMIT', def: 10, help: 'Match time in minutes. 0 sets no limit' },
   maps: { env: 'MAPS', def: MAP_IDS.join(','), help: `Map rotation, a list with commas. The first map starts. Maps: ${MAP_IDS.join(', ')}` },
+  votes: { env: 'VOTES', def: 'on', help: 'on: players can vote to change the map and other settings' },
   spawnprotect: { env: 'SPAWN_PROTECT', def: 2, help: 'Seconds without damage after a spawn. 0 sets it to off' },
   rconpassword: { env: 'RCON_PASSWORD', def: '', help: 'Password for the remote console, 8 characters or more. Empty sets the remote console to off' },
 };
@@ -67,6 +68,7 @@ function readOptions() {
     maxClients: num('maxclients', 1, 32), bots: num('bots', 0, 15), botSkill: num('botskill', 1, 5),
     botFill: !/^(off|0|false|no)$/i.test(String(o.botfill)),
     doubleJump: /^(on|1|true|yes)$/i.test(String(o.doublejump)),
+    votes: !/^(off|0|false|no)$/i.test(String(o.votes)),
     fragLimit: num('fraglimit', 0, 1000), timeLimit: num('timelimit', 0, 600), spawnProtect: num('spawnprotect', 0, 10),
   };
 }
@@ -181,7 +183,7 @@ setInterval(() => {
 // ---------- Commands ----------
 // The local console and the remote console (rcon) use the same commands.
 // "out" is a function that writes one line of the answer.
-const HELP = 'status | bots <count> [skill 1-5] | botfill <on|off> | doublejump <on|off> | fraglimit <n> | timelimit <minutes> | spawnprotect <seconds> | map <id> | nextmap | maps [id,id] | restart | kick <player id> | say <text> | quit';
+const HELP = 'status | bots <count> [skill 1-5] | botfill <on|off> | doublejump <on|off> | fraglimit <n> | timelimit <minutes> | spawnprotect <seconds> | map <id> | nextmap | maps [id,id] | votes <on|off> | restart | kick <player id> | say <text> | quit';
 const COMMANDS = {
   help(out) { out(HELP); },
   status(out) {
@@ -234,6 +236,10 @@ const COMMANDS = {
       game.applySettings({ maps: ids });
     }
     out(`Map rotation: ${game.rotation.join(', ')}`);
+  },
+  votes(out, v) {
+    if (v === 'on' || v === 'off') game.applySettings({ votes: v === 'on' });
+    out(`Votes: ${game.votesOn ? 'on' : 'off'}`);
   },
   restart(out) { game.game.restart(); out('The match starts again.'); },
   kick(out, id) {

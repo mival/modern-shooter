@@ -56,6 +56,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #05060c; col
 #weapons span { font-size: 10px; white-space: nowrap; color: var(--c); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 #weapons b { font-size: 17px; }
 #weapons .empty b { color: var(--bad); }
+#vote { position: absolute; left: 16px; top: 38%; max-width: 320px; padding: 8px 12px; background: var(--panel); border: 1px solid var(--line);
+  border-left: 3px solid var(--warm); border-radius: 4px; font-size: 14px; white-space: pre-line; }
 #amp { position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%); padding: 4px 14px; color: #f0a8ff;
   border: 1px solid #e04aff; background: rgba(60, 10, 80, 0.7); border-radius: 4px; font-weight: 700; }
 #perfgraph { position: absolute; left: 16px; top: 66px; width: 360px; height: 96px; border: 1px solid var(--line); border-radius: 3px; }

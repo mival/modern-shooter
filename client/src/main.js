@@ -72,6 +72,8 @@ let conn = null, joined = false, myId = 0, me = null;
 let seq = 0, pending = [], snaps = [];
 let matchState = 'play', timeLeft = -1, fragLimit = 0;
 let rtt = 0, lastPing = 0, fps = 0, frames = 0, fpsAt = 0;
+// The open vote on the server, or null.
+let vote = null;
 let stepSmooth = 0, hitUntil = 0, flash = 0, centerUntil = 0, pickupUntil = 0;
 const info = new Map();
 const local = newMoveState();
@@ -91,7 +93,7 @@ function loadMap(id) {
 
 function leaveGame(message = '') {
   if (conn) conn.close();
-  conn = null; joined = false; me = null; myId = 0;
+  conn = null; joined = false; me = null; myId = 0; vote = null;
   pending = []; snaps = []; info.clear();
   renderer.setPlayers([], 0);
   renderer.setProjectiles([]);
@@ -178,6 +180,8 @@ function onMessage(m) {
     renderer.setProjectiles([]);
     $('feed').replaceChildren();
     center(map.name, 2500);
+  } else if (m.t === 'vote') {
+    vote = m.text ? { text: m.text, yes: m.yes, no: m.no, end: performance.now() + m.left * 1000 } : null;
   } else if (m.t === 'chat') addChat(m.name, m.text);
   else if (m.t === 'print') addChat(null, m.text);
   else if (m.t === 'cfg') {
@@ -325,6 +329,11 @@ function updateHud(now) {
     bar[i].className = (own ? 'own' : '') + (i === me.weapon ? ' active' : '') + (own && !melee(i) && me.ammo[i] === 0 ? ' empty' : '');
     const t = !own ? '–' : melee(i) ? '∞' : String(me.ammo[i]);
     if (bar[i].lastChild.textContent !== t) bar[i].lastChild.textContent = t;
+  }
+  $('vote').hidden = !vote;
+  if (vote) {
+    const text = `Vote: ${vote.text}\nyes ${vote.yes} · no ${vote.no} · ${Math.max(0, Math.ceil((vote.end - now) / 1000))} s\nF1: yes   F2: no`;
+    if ($('vote').textContent !== text) $('vote').textContent = text;
   }
   $('amp').hidden = !(me.amp > 0 || me.prot);
   if (me.amp > 0 || me.prot) $('amp').textContent = [me.amp > 0 ? `Amplifier ${me.amp}` : '', me.prot ? 'Spawn protection' : ''].filter(Boolean).join(' · ');
@@ -519,7 +528,9 @@ let rconPassword = '';
 // Handles a chat line that starts with "/". The client does not send such a line as chat.
 function chatCommand(text) {
   const [name, ...args] = text.slice(1).split(/\s+/);
-  if (name !== 'rcon') { addChat(null, 'Commands: /rcon login <password>, /rcon <server command>, /rcon help'); return; }
+  if (name === 'vote') { conn.send({ t: 'vote', cmd: args.join(' ') }); return; }
+  if (name === 'yes' || name === 'no') { conn.send({ t: 'vote', v: name === 'yes' ? 1 : 0 }); return; }
+  if (name !== 'rcon') { addChat(null, 'Commands: /vote <change>, /yes, /no, /rcon login <password>, /rcon <server command>'); return; }
   if (conn.local) { addChat(null, 'The remote console works only on a server.'); return; }
   if (args[0] === 'login') {
     rconPassword = args.slice(1).join(' ');
@@ -530,6 +541,7 @@ function chatCommand(text) {
 
 const chat = $('chatinput');
 input.onKey = (code) => {
+  if ((code === 'F1' || code === 'F2') && vote && conn) conn.send({ t: 'vote', v: code === 'F1' ? 1 : 0 });
   if (code === 'F3') { settings.perf = !settings.perf; $('perfon').checked = settings.perf; perf.setVisible(settings.perf); saveSettings(); }
   if (code === 'Enter' && joined && $('menu').hidden) {
     input.typing = true;

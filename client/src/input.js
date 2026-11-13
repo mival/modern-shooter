@@ -15,7 +15,7 @@ export class Input {
 
     document.addEventListener('keydown', (e) => {
       if (this.typing || e.target.tagName === 'INPUT') return;
-      if (this.locked() || e.code === 'Tab' || e.code === 'F3') e.preventDefault();
+      if (this.locked() || e.code === 'Tab' || e.code === 'F3' || e.code === 'F1' || e.code === 'F2') e.preventDefault();
       if (e.repeat) return;
       this.keys.add(e.code);
       const m = /^Digit([1-9])$/.exec(e.code);
