@@ -88,7 +88,7 @@ test('a jump pad keeps the horizontal movement', () => {
 });
 
 test('a rocket jump goes higher than a normal jump', () => {
-  const g = new Game(buildMap(), { seed: 1 });
+  const g = new Game(buildMap(), { seed: 1, spawnProtect: 0 });
   const p = g.addPlayer(1, 'a');
   p.x = 0; p.y = 24; p.z = 600; p.weapons |= 1 << W_RL; p.ammo[W_RL] = 5;
   for (let i = 0; i < 30; i++) { g.runCmd(p, cmd({ weapon: W_RL, pitch: -1.5 })); g.tick(); }
@@ -120,7 +120,7 @@ test('the double jump works only with the server option', () => {
 });
 
 test('the hammer needs no ammo and hits only at close range', () => {
-  const g = new Game(buildMap(), { seed: 1 });
+  const g = new Game(buildMap(), { seed: 1, spawnProtect: 0 });
   const a = g.addPlayer(1, 'a'), b = g.addPlayer(2, 'b');
   assert.ok(a.weapons & (1 << W_HAMMER));
   const place = (dist) => {
@@ -145,7 +145,7 @@ test('the hammer needs no ammo and hits only at close range', () => {
 });
 
 test('the bots can go from each spawn point to each item', () => {
-  const g = new Game(buildMap(), { seed: 1 });
+  const g = new Game(buildMap(), { seed: 1, spawnProtect: 0 });
   const nav = buildNav(g);
   const first = map.items.length;
   for (let s = 0; s < map.spawns.length; s++) {
@@ -198,7 +198,7 @@ test('the host handles a client and bad messages', () => {
 
 test('lag compensation hits a target at its position in the past', () => {
   const run = (useViewTime) => {
-    const g = new Game(buildMap(), { seed: 1 });
+    const g = new Game(buildMap(), { seed: 1, spawnProtect: 0 });
     const a = g.addPlayer(1, 'a'), b = g.addPlayer(2, 'b');
     // Player "a" looks along -z. Player "b" crosses the line of fire.
     a.x = 0; a.y = 24; a.z = 700; a.weapons |= 1 << W_RAIL; a.ammo[W_RAIL] = 5; a.weapon = a.wantWeapon = W_RAIL;
@@ -232,4 +232,21 @@ test('the host removes a human player with kick', () => {
   assert.ok(closed);
   assert.equal(host.humanCount(), 0);
   assert.equal(host.game.players.has(id), false);
+});
+
+test('spawn protection stops damage until the player fires', () => {
+  const g = new Game(buildMap(), { seed: 1, spawnProtect: 2 });
+  const a = g.addPlayer(1, 'a'), b = g.addPlayer(2, 'b');
+  g.damage(b, a, 50, 1, 0, 0, W_MG);
+  assert.equal(b.health, 125);
+  assert.equal(g.sharedSnapshot().p.find((p) => p[0] === 2)[7] & 8, 8);
+  // The protection stops when the player fires.
+  g.fire(b);
+  g.damage(b, a, 50, 1, 0, 0, W_MG);
+  assert.equal(b.health, 75);
+  // The protection stops after the time.
+  for (let i = 0; i < 130; i++) g.tick();
+  assert.equal(g.sharedSnapshot().p.find((p) => p[0] === 1)[7] & 8, 0);
+  g.damage(a, b, 50, 1, 0, 0, W_MG);
+  assert.equal(a.health, 75 - 2);
 });

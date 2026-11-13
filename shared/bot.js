@@ -169,7 +169,8 @@ export class Bot {
     const p = this.p;
     let best = null, bd = Infinity;
     for (const q of this.game.players.values()) {
-      if (q === p || q.dead) continue;
+      // Do not attack a player that has spawn protection.
+      if (q === p || q.dead || this.game.time < q.protectUntil) continue;
       const d = Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z);
       if (d >= bd || d > 3000) continue;
       // A bot does not see behind its back. It turns to an enemy that is near or that hurt it.

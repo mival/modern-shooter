@@ -22,6 +22,7 @@ const OPTIONS = {
   doublejump: { env: 'DOUBLE_JUMP', def: 'off', help: 'on: a player can jump one more time in the air' },
   fraglimit: { env: 'FRAG_LIMIT', def: 20, help: 'Frags that end a match. 0 sets no limit' },
   timelimit: { env: 'TIME_LIMIT', def: 10, help: 'Match time in minutes. 0 sets no limit' },
+  spawnprotect: { env: 'SPAWN_PROTECT', def: 2, help: 'Seconds without damage after a spawn. 0 sets it to off' },
   rconpassword: { env: 'RCON_PASSWORD', def: '', help: 'Password for the remote console, 8 characters or more. Empty sets the remote console to off' },
 };
 
@@ -59,7 +60,7 @@ function readOptions() {
     maxClients: num('maxclients', 1, 32), bots: num('bots', 0, 15), botSkill: num('botskill', 1, 5),
     botFill: !/^(off|0|false|no)$/i.test(String(o.botfill)),
     doubleJump: /^(on|1|true|yes)$/i.test(String(o.doublejump)),
-    fragLimit: num('fraglimit', 0, 1000), timeLimit: num('timelimit', 0, 600),
+    fragLimit: num('fraglimit', 0, 1000), timeLimit: num('timelimit', 0, 600), spawnProtect: num('spawnprotect', 0, 10),
   };
 }
 
@@ -173,13 +174,13 @@ setInterval(() => {
 // ---------- Commands ----------
 // The local console and the remote console (rcon) use the same commands.
 // "out" is a function that writes one line of the answer.
-const HELP = 'status | bots <count> [skill 1-5] | botfill <on|off> | doublejump <on|off> | fraglimit <n> | timelimit <minutes> | restart | kick <player id> | say <text> | quit';
+const HELP = 'status | bots <count> [skill 1-5] | botfill <on|off> | doublejump <on|off> | fraglimit <n> | timelimit <minutes> | spawnprotect <seconds> | restart | kick <player id> | say <text> | quit';
 const COMMANDS = {
   help(out) { out(HELP); },
   status(out) {
     const s = game.status();
     out(`This minute: ${tickLine()}`);
-    out(`${s.name} | map ${s.map} | players ${s.players}/${s.maxClients} | bots ${s.bots} (${game.botFill ? `fill on: ${game.botCount} players in total` : 'fill off'}, skill ${game.botSkill}) | double jump ${s.doubleJump ? 'on' : 'off'} | frag limit ${game.game.fragLimit} | time limit ${game.game.timeLimit / 60} min`);
+    out(`${s.name} | map ${s.map} | players ${s.players}/${s.maxClients} | bots ${s.bots} (${game.botFill ? `fill on: ${game.botCount} players in total` : 'fill off'}, skill ${game.botSkill}) | double jump ${s.doubleJump ? 'on' : 'off'} | frag limit ${game.game.fragLimit} | time limit ${game.game.timeLimit / 60} min | spawn protection ${game.game.spawnProtect} s`);
     for (const p of game.game.scores()) out(`  ${String(p.id).padStart(3)} ${p.name.padEnd(16)} ${p.bot ? 'bot  ' : 'human'} frags ${p.frags} deaths ${p.deaths}`);
   },
   bots(out, count, skill) {
@@ -187,28 +188,32 @@ const COMMANDS = {
     if (!Number.isInteger(n) || n < 0 || n > 15 || (s !== undefined && !(Number.isInteger(s) && s >= 1 && s <= 5))) return out('Usage: bots <0-15> [skill 1-5]');
     // This command sets the exact number of bots. Thus it sets the bot fill to off.
     const hadFill = game.botFill;
-    game.setBots(n, s, false);
+    game.applySettings({ bots: n, botSkill: s, botFill: false });
     out(`Bots: ${game.bots.size}, skill ${game.botSkill}.${hadFill ? ' Bot fill is now off.' : ''}`);
   },
   botfill(out, v) {
-    if (v === 'on' || v === 'off') game.setBots(game.botCount, undefined, v === 'on');
+    if (v === 'on' || v === 'off') game.applySettings({ botFill: v === 'on' });
     out(game.botFill
       ? `Bot fill: on. The server keeps ${game.botCount} players in total. A bot leaves when a player joins. Active bots: ${game.bots.size}`
       : `Bot fill: off. The number of bots is constant. Active bots: ${game.bots.size}`);
   },
   doublejump(out, v) {
-    if (v === 'on' || v === 'off') game.setDoubleJump(v === 'on');
+    if (v === 'on' || v === 'off') game.applySettings({ doubleJump: v === 'on' });
     out(`Double jump: ${game.game.world.doubleJump ? 'on' : 'off'}`);
   },
   fraglimit(out, v) {
     const n = Number(v);
-    if (v !== undefined && Number.isInteger(n) && n >= 0 && n <= 1000) { game.game.fragLimit = n; game.broadcast({ t: 'cfg', fragLimit: n }); }
+    if (v !== undefined) game.applySettings({ fragLimit: n });
     out(`Frag limit: ${game.game.fragLimit}`);
   },
   timelimit(out, v) {
     const n = Number(v);
-    if (v !== undefined && Number.isInteger(n) && n >= 0 && n <= 600) game.game.timeLimit = n * 60;
+    if (v !== undefined) game.applySettings({ timeLimit: n });
     out(`Time limit: ${game.game.timeLimit / 60} minutes`);
+  },
+  spawnprotect(out, v) {
+    if (v !== undefined) game.applySettings({ spawnProtect: Number(v) });
+    out(`Spawn protection: ${game.game.spawnProtect ? game.game.spawnProtect + ' seconds' : 'off'}`);
   },
   restart(out) { game.game.restart(); out('The match starts again.'); },
   kick(out, id) {

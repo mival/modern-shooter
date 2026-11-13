@@ -302,8 +302,8 @@ function updateHud(now) {
     const t = !own ? '–' : melee(i) ? '∞' : String(me.ammo[i]);
     if (bar[i].lastChild.textContent !== t) bar[i].lastChild.textContent = t;
   }
-  $('amp').hidden = !(me.amp > 0);
-  if (me.amp > 0) $('amp').textContent = `Amplifier ${me.amp}`;
+  $('amp').hidden = !(me.amp > 0 || me.prot);
+  if (me.amp > 0 || me.prot) $('amp').textContent = [me.amp > 0 ? `Amplifier ${me.amp}` : '', me.prot ? 'Spawn protection' : ''].filter(Boolean).join(' · ');
   const t = Math.max(0, timeLeft);
   $('clock').textContent = timeLeft < 0 ? '∞' : `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
   $('scores').hidden = !(input.down('Tab') || matchState === 'intermission');
@@ -377,7 +377,7 @@ function interpolate(now) {
     const p = {
       id: q[0], x: o[1] + (q[1] - o[1]) * f, y: o[2] + (q[2] - o[2]) * f, z: o[3] + (q[3] - o[3]) * f,
       yaw: lerpAngle(o[4], q[4], f), pitch: o[5] + (q[5] - o[5]) * f, weapon: q[6],
-      dead: (q[7] & 1) !== 0, beam: (q[7] & 2) !== 0, amp: (q[7] & 4) !== 0,
+      dead: (q[7] & 1) !== 0, beam: (q[7] & 2) !== 0, amp: (q[7] & 4) !== 0, shield: (q[7] & 8) !== 0,
     };
     if (q[0] === myId) { p.x = camPos.x; p.y = camPos.y - PM.eye; p.z = camPos.z; p.yaw = input.yaw; p.pitch = input.pitch; }
     list.push(p);

@@ -27,6 +27,8 @@ export class GameHost {
     // If "botFill" is true, a bot leaves when a human player joins.
     this.botFill = opts.botFill ?? true;
     this.log = opts.log || (() => {});
+    // The owner of the host can set this function. The host calls it after a setting changed.
+    this.onSettings = null;
     this.game = new Game(buildMap(), opts);
     this.nav = null;
     this.clients = new Set();
@@ -148,6 +150,37 @@ export class GameHost {
   setDoubleJump(on) {
     this.game.world.doubleJump = !!on;
     this.broadcast({ t: 'cfg', doubleJump: this.game.world.doubleJump });
+  }
+
+  // Returns the settings that an operator can change during a game.
+  getSettings() {
+    const g = this.game;
+    return {
+      bots: this.botCount, botSkill: this.botSkill, botFill: this.botFill,
+      doubleJump: g.world.doubleJump, fragLimit: g.fragLimit, timeLimit: g.timeLimit / 60,
+      spawnProtect: g.spawnProtect,
+    };
+  }
+
+  // Applies new values for some settings. The function ignores a value that is not valid.
+  // Returns true if a setting changed.
+  applySettings(v, notify = true) {
+    const g = this.game, before = JSON.stringify(this.getSettings());
+    const int = (x, lo, hi) => Number.isInteger(x) && x >= lo && x <= hi;
+    const bots = int(v.bots, 0, MAX_BOTS) ? v.bots : this.botCount;
+    const skill = int(v.botSkill, 1, 5) && v.botSkill !== this.botSkill ? v.botSkill : undefined;
+    const fill = typeof v.botFill === 'boolean' ? v.botFill : this.botFill;
+    if (bots !== this.botCount || skill !== undefined || fill !== this.botFill) this.setBots(bots, skill, fill);
+    if (typeof v.doubleJump === 'boolean' && v.doubleJump !== g.world.doubleJump) this.setDoubleJump(v.doubleJump);
+    if (int(v.fragLimit, 0, 1000) && v.fragLimit !== g.fragLimit) {
+      g.fragLimit = v.fragLimit;
+      this.broadcast({ t: 'cfg', fragLimit: g.fragLimit });
+    }
+    if (int(v.timeLimit, 0, 600)) g.timeLimit = v.timeLimit * 60;
+    if (Number.isFinite(v.spawnProtect) && v.spawnProtect >= 0 && v.spawnProtect <= 10) g.spawnProtect = v.spawnProtect;
+    const changed = JSON.stringify(this.getSettings()) !== before;
+    if (changed && notify && this.onSettings) this.onSettings(this.getSettings());
+    return changed;
   }
 
   removeBot(id) {

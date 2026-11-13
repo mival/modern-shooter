@@ -114,6 +114,7 @@ The server stops the simulation when no human player is connected.
 | `--doublejump` | `DOUBLE_JUMP` | off | `on`: a player can jump one more time in the air. The server sends this setting to the clients. |
 | `--fraglimit` | `FRAG_LIMIT` | 20 | Frags that end a match. 0 sets no limit. |
 | `--timelimit` | `TIME_LIMIT` | 10 | Match time in minutes. 0 sets no limit. |
+| `--spawnprotect` | `SPAWN_PROTECT` | 2 | Seconds without damage after a spawn. The protection stops when the player fires. 0 sets it to off. |
 | `--rconpassword` | `RCON_PASSWORD` | empty | Password for the remote console, 8 characters or more. Empty sets it to off. |
 
 With `--botfill on`, `--bots 4` means: the server keeps a minimum of 4 players. Bots fill the free places.
@@ -129,6 +130,7 @@ Type these commands in the terminal of the server:
 | `botfill <on\|off>` | `on`: the bot count becomes the total number of players, and a bot leaves when a player joins. `off`: the number of bots is constant. |
 | `doublejump <on\|off>` | Set the double jump. The change applies immediately. |
 | `fraglimit <n>`, `timelimit <minutes>` | Change the match limits. |
+| `spawnprotect <seconds>` | Set the time without damage after a spawn (0 to 10). |
 | `restart` | Start the match again. |
 | `kick <player id>` | Remove a human player. The `status` command shows the ids. |
 | `say <text>` | Send a message to all players. |

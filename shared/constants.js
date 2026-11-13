@@ -56,6 +56,8 @@ export const HITSCAN_RANGE = 8192;
 export const RESPAWN_DELAY = 1.7;
 export const RESPAWN_FORCE = 5;
 export const INTERMISSION_TIME = 10;
+// After a spawn, a player takes no damage for this time in seconds. The protection stops when the player fires.
+export const SPAWN_PROTECT = 2;
 
 // Item types. "respawn" is the time in seconds until the item comes back.
 export const ITEMS = {

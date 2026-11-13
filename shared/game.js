@@ -2,7 +2,7 @@
 import {
   TICK, PM, BTN_FIRE, BTN_JUMP, WEAPONS, ITEMS, AMMO_MAX, W_HAMMER, W_MG, W_SG, W_RL, W_ARC, W_RAIL, W_PG, SPAWN_HEALTH, SPAWN_AMMO,
   ARMOR_ABSORB, AMP_FACTOR, KNOCKBACK, HITSCAN_RANGE, RESPAWN_DELAY, RESPAWN_FORCE,
-  INTERMISSION_TIME,
+  INTERMISSION_TIME, SPAWN_PROTECT,
 } from './constants.js';
 import { makeWorld, traceBox, rayBox, newTrace } from './collision.js';
 import { pmove, PMF_JUMPED, PMF_PAD } from './pmove.js';
@@ -33,6 +33,7 @@ export class Game {
     this.world.doubleJump = !!opts.doubleJump;
     this.fragLimit = opts.fragLimit ?? 20;
     this.timeLimit = (opts.timeLimit ?? 10) * 60;
+    this.spawnProtect = opts.spawnProtect ?? SPAWN_PROTECT;
     this.rng = mulberry32(opts.seed ?? (Date.now() & 0x7fffffff));
     this.players = new Map();
     this.projectiles = [];
@@ -65,7 +66,7 @@ export class Game {
       health: 0, armor: 0, weapon: W_MG, wantWeapon: W_MG, weapons: 0,
       ammo: WEAPONS.map(() => 0), weaponTime: 0, beam: false, amp: 0,
       dead: false, deadAt: 0, respawnAt: 0, frags: 0, deaths: 0,
-      lastPad: -1, lastHurtBy: 0, lastHurtAt: -10, spawnCount: 0,
+      lastPad: -1, lastHurtBy: 0, lastHurtAt: -10, spawnCount: 0, protectUntil: 0,
     };
     this.players.set(id, p);
     this.spawn(p);
@@ -100,6 +101,7 @@ export class Game {
     p.ammo[W_MG] = SPAWN_AMMO;
     p.weaponTime = 0; p.beam = false; p.amp = 0;
     p.dead = false;
+    p.protectUntil = this.time + this.spawnProtect;
     p.spawnCount++;
     p.hist = [];
     this.events.push({ t: 'spawn', id: p.id });
@@ -218,6 +220,8 @@ export class Game {
   }
 
   fire(p) {
+    // A player that fires has no more spawn protection.
+    p.protectUntil = 0;
     const def = WEAPONS[p.weapon];
     const cp = Math.cos(p.pitch), sp = Math.sin(p.pitch);
     const sy = Math.sin(p.yaw), cy = Math.cos(p.yaw);
@@ -276,6 +280,7 @@ export class Game {
 
   damage(target, attacker, amount, dx, dy, dz, weapon) {
     if (target.dead || this.state !== 'play') return;
+    if (attacker !== target && this.time < target.protectUntil) return;
     if (attacker && attacker.amp > 0) amount *= AMP_FACTOR;
     const k = Math.min(amount, 200) * KNOCKBACK;
     target.vx += dx * k; target.vy += dy * k; target.vz += dz * k;
@@ -422,7 +427,7 @@ export class Game {
     const pl = [];
     for (const p of this.players.values()) {
       pl.push([p.id, r1(p.x), r1(p.y), r1(p.z), r3(p.yaw), r3(p.pitch), p.weapon,
-        (p.dead ? 1 : 0) | (p.beam ? 2 : 0) | (p.amp > 0 ? 4 : 0)]);
+        (p.dead ? 1 : 0) | (p.beam ? 2 : 0) | (p.amp > 0 ? 4 : 0) | (!p.dead && this.time < p.protectUntil ? 8 : 0)]);
     }
     const pr = this.projectiles.map((q) => [q.id, q.w, r1(q.x), r1(q.y), r1(q.z), r1(q.vx), r1(q.vy), r1(q.vz)]);
     let it = '';
@@ -436,6 +441,7 @@ export class Game {
       x: p.x, y: p.y, z: p.z, vx: p.vx, vy: p.vy, vz: p.vz, ground: p.ground, jumpHeld: p.jumpHeld, jumps: p.jumps,
       health: p.health, armor: p.armor, weapon: p.weapon, weapons: p.weapons, ammo: p.ammo.slice(),
       amp: Math.ceil(p.amp), dead: p.dead, sc: p.spawnCount, syaw: p.spawnYaw,
+      prot: !p.dead && this.time < p.protectUntil,
     };
   }
 
