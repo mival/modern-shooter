@@ -240,6 +240,9 @@ export class Bot {
         if (this.path.length) n = this.nav.nodes[this.path[0]];
       }
       mx = n.x - p.x; mz = n.z - p.z;
+      // In the air, the bot cannot stop quickly. Aim at the point where the bot must start to brake.
+      // Then the bot lands on the target and does not fly over it.
+      if (!p.ground) { mx -= p.vx * 0.5; mz -= p.vz * 0.5; }
       const l = Math.hypot(mx, mz) || 1;
       mx /= l; mz /= l;
     }

@@ -23,24 +23,28 @@ function newMap(name, size) {
     spawn(x, y, z) { m.spawns.push({ pos: [x, y + FLOOR, z], yaw: Math.atan2(x, z) }); },
     // A jump pad pushes the player up. It does not change the horizontal movement.
     // "top" is the height that the player origin reaches. "land" is where the bots go after the pad.
-    pad(x, z, hw, top, land) {
+    // "base" is the height of the floor below the pad.
+    pad(x, z, hw, top, land, base = 0) {
       m.pads.push({
-        min: [x - hw, 0, z - hw], max: [x + hw, 32, z + hw],
-        pos: [x, FLOOR, z], land,
-        up: Math.sqrt(2 * PM.gravity * (top - FLOOR)),
+        min: [x - hw, base, z - hw], max: [x + hw, base + 32, z + hw],
+        pos: [x, base + FLOOR, z], land,
+        up: Math.sqrt(2 * PM.gravity * (top - base - FLOOR)),
       });
     },
     // A navigation point for the bots.
     node(x, y, z) { m.nodes.push([x, y + FLOOR, z]); },
     // The floor, four walls, and a ceiling that the players do not see.
-    shell(height) {
-      const s = size, o = size + 64;
-      this.box(-s, -64, -s, s, 0, s, 'floor');
-      this.box(-o, 0, -o, -s, height, o, 'wall');
-      this.box(s, 0, -o, o, height, o, 'wall');
-      this.box(-s, 0, -o, s, height, -s, 'wall');
-      this.box(-s, 0, s, s, height, o, 'wall');
-      this.box(-o, height, -o, o, height + 64, o, 'wall', true);
+    // "sx" and "sz" are the half sizes of the arena. The default is a square.
+    shell(height, sx = size, sz = size) {
+      const ox = sx + 64, oz = sz + 64;
+      // The client uses these values for the camera that shows the full arena.
+      m.half = [sx, sz]; m.height = height;
+      this.box(-sx, -64, -sz, sx, 0, sz, 'floor');
+      this.box(-ox, 0, -oz, -sx, height, oz, 'wall');
+      this.box(sx, 0, -oz, ox, height, oz, 'wall');
+      this.box(-sx, 0, -oz, sx, height, -sz, 'wall');
+      this.box(-sx, 0, sz, sx, height, oz, 'wall');
+      this.box(-ox, height, -oz, ox, height + 64, oz, 'wall', true);
     },
   };
 }
@@ -219,6 +223,240 @@ function buildDeck() {
   return m;
 }
 
+// "Long Hall": a long arena with a gallery on each side and a bridge in the middle. Good for long shots.
+function buildHall() {
+  const { m, box, item, spawn, pad, node, shell } = bind(newMap('Long Hall', 832));
+  const UP = 128; // Height of the galleries and the bridge.
+  shell(448, 448, 832);
+
+  // A gallery along each long wall.
+  box(320, 0, -832, 448, UP, 832, 'plat');
+  box(-448, 0, -832, -320, UP, 832, 'plat');
+  // Bridge between the galleries.
+  box(-320, UP - 16, -48, 320, UP, 48, 'walk');
+  // Stairs at the south end (east gallery) and at the north end (west gallery).
+  for (let i = 0; i < 8; i++) {
+    box(224, 0, -544 - 32 * i, 320, 16 * (i + 1), -832, 'stair');
+    box(-224, 0, 544 + 32 * i, -320, 16 * (i + 1), 832, 'stair');
+  }
+  // Walls for cover across the hall.
+  box(-320, 0, 192, -64, 96, 224, 'cover');
+  box(64, 0, -224, 320, 96, -192, 'cover');
+  box(40, 0, 470, 104, 64, 534, 'crate');
+  box(-40, 0, -470, -104, 64, -534, 'crate');
+
+  item('weapon_rail', 0, UP, 0);
+  item('ammo_rail', 150, UP, 0);
+  item('ammo_rail', -150, UP, 0);
+  item('weapon_rl', 0, 0, 0);
+  item('ammo_rl', 0, 0, 120);
+  item('ammo_rl', 0, 0, -120);
+  item('mega', 0, 0, 760);
+  item('armor100', 0, 0, -760);
+  item('weapon_pg', 384, UP, 600);
+  item('weapon_pg', -384, UP, -600);
+  item('ammo_pg', 384, UP, 480);
+  item('ammo_pg', -384, UP, -480);
+  item('armor50', 384, UP, -300);
+  item('armor50', -384, UP, 300);
+  item('weapon_sg', -200, 0, 400);
+  item('weapon_sg', 200, 0, -400);
+  item('weapon_arc', -60, 0, 420);
+  item('weapon_arc', 60, 0, -420);
+  item('ammo_sg', -200, 0, 300);
+  item('ammo_arc', 200, 0, -300);
+  item('ammo_mg', 250, 0, 0);
+  item('ammo_mg', -250, 0, 0);
+  for (const [sx, sz] of signs) item('health25', sx * 180, 0, sz * 640);
+  for (const s of [1, -1]) {
+    item('health50', s * 384, UP, s * 80);
+    item('shard', s * 384, UP, s * -560);
+    item('shard', s * 384, UP, s * -660);
+  }
+
+  spawn(150, 0, 720);
+  spawn(-150, 0, -720);
+  spawn(-200, 0, 80);
+  spawn(200, 0, -80);
+  spawn(384, UP, 770);
+  spawn(-384, UP, -770);
+  spawn(384, UP, 200);
+  spawn(-384, UP, -200);
+
+  pad(270, 400, 40, UP + 84, [384, UP + FLOOR, 400]);
+  pad(-270, -400, 40, UP + 84, [-384, UP + FLOOR, -400]);
+
+  node(272, 0, -500);
+  node(272, UP, -800);
+  node(384, UP, -790);
+  node(-272, 0, 500);
+  node(-272, UP, 800);
+  node(-384, UP, 790);
+  node(384, UP, 400);
+  node(-384, UP, -400);
+  node(0, 0, 600);
+  node(0, 0, -600);
+  node(160, 0, 250);
+  node(-160, 0, -250);
+  node(-20, 0, 250);
+  node(20, 0, -250);
+
+  return m;
+}
+
+// "High Core": a tower with two levels in the middle of an open ring. The Amplifier is on the top.
+function buildCore() {
+  const { m, box, item, spawn, pad, node, shell } = bind(newMap('High Core', 768));
+  const T1 = 128, T2 = 272; // Heights of the two levels of the tower.
+  shell(640);
+
+  box(-256, 0, -256, 256, T1, 256, 'plat');
+  box(-160, T1, -160, 160, T2, 160, 'ped');
+  // Stairs to the first level on the north side and on the south side.
+  for (let i = 0; i < 8; i++) {
+    box(-224 + 32 * i, 0, 256, 96, 16 * (i + 1), 352, 'stair');
+    box(224 - 32 * i, 0, -256, -96, 16 * (i + 1), -352, 'stair');
+  }
+  for (const [sx, sz] of signs) {
+    box(sx * 512, 0, sz * 512, sx * 608, 224, sz * 608, 'pillar');
+    box(sx * 380, 0, sz * 40, sx * 444, 64, sz * 104, 'crate');
+  }
+  for (const s of [1, -1]) box(-160, 0, s * 560, 160, 48, s * 592, 'cover');
+
+  item('amp', 0, T2, 0);
+  item('weapon_rail', 0, T1, 208);
+  item('ammo_rail', -208, T1, 208);
+  item('mega', 0, T1, -208);
+  item('armor50', 208, T1, -208);
+  item('armor50', -208, T1, 208);
+  item('shard', 208, T1, 208);
+  item('shard', -208, T1, -208);
+  item('weapon_rl', 680, 0, 0);
+  item('ammo_rl', 680, 0, 140);
+  item('ammo_rl', 680, 0, -140);
+  item('armor100', -680, 0, 0);
+  item('shard', -680, 0, 140);
+  item('shard', -680, 0, -140);
+  item('weapon_pg', 0, 0, 680);
+  item('weapon_pg', 0, 0, -680);
+  item('ammo_pg', 140, 0, 680);
+  item('ammo_pg', -140, 0, -680);
+  item('weapon_sg', 400, 0, 400);
+  item('weapon_sg', -400, 0, -400);
+  item('weapon_arc', -400, 0, 400);
+  item('weapon_arc', 400, 0, -400);
+  item('ammo_sg', 300, 0, 440);
+  item('ammo_arc', -300, 0, 440);
+  item('ammo_mg', 0, 0, 450);
+  item('ammo_mg', 0, 0, -450);
+  for (const [sx, sz] of signs) item('health25', sx * 680, 0, sz * 400);
+  item('health50', 480, 0, -200);
+  item('health50', -480, 0, 200);
+
+  for (const [sx, sz] of signs) spawn(sx * 690, 0, sz * 690);
+  spawn(520, 0, 250);
+  spawn(-520, 0, -250);
+  spawn(-250, 0, 500);
+  spawn(250, 0, -500);
+
+  // From the ground to the first level, and from the first level to the top.
+  pad(304, 170, 40, T1 + 84, [208, T1 + FLOOR, 208]);
+  pad(-304, -170, 40, T1 + 84, [-208, T1 + FLOOR, -208]);
+  pad(210, 0, 36, T2 + 64, [0, T2 + FLOOR, 0], T1);
+  pad(-210, 0, 36, T2 + 64, [0, T2 + FLOOR, 0], T1);
+
+  node(-270, 0, 304);
+  node(48, T1, 304);
+  node(48, T1, 208);
+  node(270, 0, -304);
+  node(-48, T1, -304);
+  node(-48, T1, -208);
+  node(208, T1, 110);
+  node(-208, T1, -110);
+  for (const [sx, sz] of signs) node(sx * 440, 0, sz * 640);
+  for (const [sx, sz] of signs) node(sx * 640, 0, sz * 440);
+  node(540, 0, 0);
+  node(-540, 0, 0);
+
+  return m;
+}
+
+// "Cross Guard": a cross of thick walls makes four rooms. The players can walk on the top of the walls.
+function buildCross() {
+  const { m, box, item, spawn, pad, node, shell } = bind(newMap('Cross Guard', 800));
+  const UP = 160; // Height of the walls.
+  shell(512);
+
+  // The cross. A gap between each arm and the outer wall connects two rooms.
+  box(-48, 0, -544, 48, UP, 544, 'plat');
+  box(-544, 0, -48, -48, UP, 48, 'plat');
+  box(48, 0, -48, 544, UP, 48, 'plat');
+  // Stairs to the top of the cross in the north-east room and in the south-west room.
+  for (let i = 0; i < 10; i++) {
+    box(48, 0, 512 - 32 * i, 144, 16 * (i + 1), 160, 'stair');
+    box(-48, 0, -512 + 32 * i, -144, 16 * (i + 1), -160, 'stair');
+  }
+  for (const [sx, sz] of signs) {
+    box(sx * 568, 0, sz * 218, sx * 632, 208, sz * 282, 'pillar');
+    box(sx * 218, 0, sz * 568, sx * 282, 64, sz * 632, 'crate');
+  }
+
+  item('weapon_rail', 0, UP, 0);
+  item('ammo_rail', 0, UP, 120);
+  item('ammo_rail', 0, UP, -120);
+  item('mega', 500, UP, 0);
+  item('armor100', -500, UP, 0);
+  item('armor50', 0, UP, 500);
+  item('armor50', 0, UP, -500);
+  item('shard', 300, UP, 0);
+  item('shard', -300, UP, 0);
+  item('weapon_rl', 420, 0, 420);
+  item('ammo_rl', 420, 0, 300);
+  item('weapon_pg', -420, 0, -420);
+  item('ammo_pg', -420, 0, -300);
+  item('weapon_sg', -420, 0, 420);
+  item('ammo_sg', -420, 0, 300);
+  item('weapon_arc', 420, 0, -420);
+  item('ammo_arc', 420, 0, -300);
+  item('weapon_sg', 700, 0, -700);
+  item('weapon_arc', -700, 0, 700);
+  item('ammo_mg', 700, 0, 700);
+  item('ammo_mg', -700, 0, -700);
+  // Health in the gaps between the rooms.
+  item('health50', 672, 0, 0);
+  item('health50', -672, 0, 0);
+  item('health25', 0, 0, 672);
+  item('health25', 0, 0, -672);
+  for (const [sx, sz] of signs) item('health5', sx * 300, 0, sz * 300);
+
+  for (const [sx, sz] of signs) {
+    spawn(sx * 660, 0, sz * 500);
+    spawn(sx * 400, 0, sz * 710);
+  }
+
+  // Pads in the north-west room and in the south-east room.
+  pad(-110, 300, 40, UP + 84, [0, UP + FLOOR, 300]);
+  pad(110, -300, 40, UP + 84, [0, UP + FLOOR, -300]);
+
+  node(96, 0, 590);
+  node(96, UP, 176);
+  node(0, UP, 176);
+  node(-96, 0, -590);
+  node(-96, UP, -176);
+  node(0, UP, -176);
+  node(0, UP, 300);
+  node(0, UP, -300);
+  node(150, UP, 0);
+  node(-150, UP, 0);
+  for (const [sx, sz] of signs) {
+    node(sx * 672, 0, sz * 150);
+    node(sx * 150, 0, sz * 672);
+    node(sx * 250, 0, sz * 450);
+  }
+
+  return m;
+}
+
 // The functions of a map builder use "this". This function makes them safe to use alone.
 function bind(b) {
   const out = { m: b.m };
@@ -226,7 +464,7 @@ function bind(b) {
   return out;
 }
 
-export const MAPS = { yard: buildYard, deck: buildDeck };
+export const MAPS = { yard: buildYard, deck: buildDeck, hall: buildHall, core: buildCore, cross: buildCross };
 export const MAP_IDS = Object.keys(MAPS);
 export const DEFAULT_MAP = MAP_IDS[0];
 

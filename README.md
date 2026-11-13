@@ -83,6 +83,9 @@ During an offline game, press Esc, change the setup, and select "Apply bot setup
 | --- | --- | --- |
 | `yard` | Crossfire Yard | A large open arena with four corner platforms, for 4 to 12 players. |
 | `deck` | Twin Deck | A small arena with a balcony and a bridge, for 2 to 4 players. |
+| `hall` | Long Hall | A long arena with a gallery on each side and a bridge in the middle, for 4 to 8 players. Good for long shots. |
+| `core` | High Core | A tower with two levels in the middle of an open ring, for 4 to 8 players. The Amplifier is on the top. |
+| `cross` | Cross Guard | A cross of thick walls makes four rooms, for 4 to 8 players. The players can walk on the top of the walls. |
 
 The offline menu has a "Map" option: one map, or all maps in rotation.
 `shared/map.js` contains the maps. A map is a list of boxes, items, spawn points, jump pads, and navigation points.
@@ -125,7 +128,7 @@ The server stops the simulation when no human player is connected.
 | `--doublejump` | `DOUBLE_JUMP` | off | `on`: a player can jump one more time in the air. The server sends this setting to the clients. |
 | `--fraglimit` | `FRAG_LIMIT` | 20 | Frags that end a match. 0 sets no limit. |
 | `--timelimit` | `TIME_LIMIT` | 10 | Match time in minutes. 0 sets no limit. |
-| `--maps` | `MAPS` | yard,deck | Map rotation, a list with commas. The first map starts. After each match, the server goes to the next map. |
+| `--maps` | `MAPS` | all maps | Map rotation, a list with commas. The first map starts. After each match, the server goes to the next map. |
 | `--votes` | `VOTES` | on | `on`: players can vote to change the map and other settings. |
 | `--spawnprotect` | `SPAWN_PROTECT` | 2 | Seconds without damage after a spawn. The protection stops when the player fires. 0 sets it to off. |
 | `--config` | `CONFIG_FILE` | empty | File that keeps the settings that change during a game. The Docker image uses `/data/server.json`. |
@@ -268,6 +271,7 @@ npm run server   # Dedicated server. The development client can connect to ws://
 npm test         # Simulation tests.
 npm run build && BROWSER_PATH=/path/to/chrome npm run test:browser   # Browser test with headless Chrome.
 node tools/bot-accuracy.mjs   # Measure the hit rate of the bots for each skill level.
+node tools/bot-match.mjs 300 6 3 core   # Run a match with bots only on one map and print what the bots did.
 ```
 
 Useful URL parameters: `?offline` starts an offline game, `?connect=ws://host:27960` connects to a server,

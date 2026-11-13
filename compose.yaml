@@ -26,8 +26,8 @@ services:
       RCON_PASSWORD: "${RCON_PASSWORD:-}"
       FRAG_LIMIT: "20"
       TIME_LIMIT: "10"
-      # Map rotation. The first map starts. Maps: yard, deck.
-      MAPS: "yard,deck"
+      # Map rotation. The first map starts. Maps: yard, deck, hall, core, cross.
+      MAPS: "yard,deck,hall,core,cross"
       # "on": players can vote to change the map and other settings.
       VOTES: "on"
       # Seconds without damage after a spawn. "0" sets it to off.

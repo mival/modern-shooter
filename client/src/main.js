@@ -423,6 +423,14 @@ function interpolate(now) {
   renderer.setItems(last.it);
 }
 
+// Puts the camera on a path around the arena. The path is inside the walls of each map.
+function orbit(view, t) {
+  view.x = Math.cos(t) * map.half[0] * 0.84; view.z = Math.sin(t) * map.half[1] * 0.84;
+  view.y = Math.min(520, map.height * 0.78);
+  view.yaw = Math.atan2(view.x, view.z);
+  view.pitch = -Math.atan2(view.y - 90, Math.hypot(view.x, view.z));
+}
+
 let lastFrame = performance.now(), acc = 0;
 function frame(now) {
   requestAnimationFrame(frame);
@@ -456,9 +464,7 @@ function frame(now) {
     flash = Math.max(0, flash - dt * 1.6);
     const al = acc / TICK;
     if (matchState === 'intermission') {
-      const t = now / 9000;
-      view.x = Math.cos(t) * 900; view.y = 520; view.z = Math.sin(t) * 900;
-      view.yaw = Math.atan2(view.x, view.z); view.pitch = -0.42;
+      orbit(view, now / 9000);
     } else if (me.dead) {
       view.x = local.x; view.y = local.y - 10; view.z = local.z; view.roll = 0.5;
     } else {
@@ -473,9 +479,7 @@ function frame(now) {
     updateHud(now);
   } else {
     // Slow camera flight behind the menu.
-    const t = now / 14000;
-    view.x = Math.cos(t) * 820; view.y = 420; view.z = Math.sin(t) * 820;
-    view.yaw = Math.atan2(view.x, view.z); view.pitch = -0.35;
+    orbit(view, now / 14000);
   }
   renderer.render(dt, view);
   perf.render(now);

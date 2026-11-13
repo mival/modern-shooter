@@ -1,10 +1,11 @@
 // Runs a match with bots only and prints what the bots did.
-// Usage: node tools/bot-match.mjs [seconds] [bots] [skill]
+// Usage: node tools/bot-match.mjs [seconds] [bots] [skill] [map id]
 import { GameHost } from '../shared/host.js';
 
-const [seconds = 300, bots = 6, skill = 3] = process.argv.slice(2).map(Number);
+const [seconds = 300, bots = 6, skill = 3] = process.argv.slice(2, 5).map(Number);
+const mapId = process.argv[5] || 'yard';
 for (const seed of [7, 8, 9]) {
-  const host = new GameHost({ bots, botSkill: skill, botFill: false, fragLimit: 0, timeLimit: 0, seed });
+  const host = new GameHost({ bots, botSkill: skill, botFill: false, fragLimit: 0, timeLimit: 0, seed, maps: [mapId] });
   const g = host.game;
   const picks = {}, pads = { n: 0 };
   let kills = 0, upper = 0, samples = 0;

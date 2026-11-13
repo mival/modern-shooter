@@ -255,13 +255,13 @@ export class Renderer {
       const w = p.max[0] - p.min[0];
       const m = new THREE.MeshBasicMaterial({ color: 0x35ffd0 });
       const plate = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.48, w * 0.5, 3, 24), m);
-      plate.position.set(p.pos[0], 1.5, p.pos[2]);
+      plate.position.set(p.pos[0], p.min[1] + 1.5, p.pos[2]);
       this.level.add(plate);
       const ring = new THREE.Mesh(new THREE.TorusGeometry(w * 0.4, 1.5, 6, 24), m);
       ring.rotation.x = Math.PI / 2;
       ring.position.copy(plate.position);
       this.level.add(ring);
-      this.padMats.push({ m, ring });
+      this.padMats.push({ m, ring, y: p.min[1] });
     }
   }
 
@@ -561,7 +561,7 @@ export class Renderer {
     }
     for (const p of this.padMats) {
       const k = (t * 1.2) % 1;
-      p.ring.position.y = 2 + k * 40;
+      p.ring.position.y = p.y + 2 + k * 40;
       p.ring.scale.setScalar(1 - k * 0.5);
     }
     for (let i = this.effects.length - 1; i >= 0; i--) {
