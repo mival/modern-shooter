@@ -134,6 +134,13 @@ Set `SERVER_CONSOLE=1` to use the console when the input is not a terminal.
 docker compose up --build -d
 ```
 
+Each push to `main` starts a GitHub Actions workflow (`.github/workflows/docker.yml`).
+The workflow runs the tests, builds the image, and publishes it to the GitHub Container Registry:
+
+```sh
+docker run -p 27960:27960 ghcr.io/mival/modern-shooter:latest
+```
+
 Change the settings in `compose.yaml`. To use the console in a container, add `stdin_open: true`, `tty: true`,
 and run `docker attach <container>`.
 
