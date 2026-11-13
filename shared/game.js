@@ -1,6 +1,6 @@
 // The game rules. Only the server side runs this code (dedicated or in the browser).
 import {
-  TICK, PM, BTN_FIRE, BTN_JUMP, WEAPONS, ITEMS, AMMO_MAX, W_MG, SPAWN_HEALTH, SPAWN_AMMO,
+  TICK, PM, BTN_FIRE, BTN_JUMP, WEAPONS, ITEMS, AMMO_MAX, W_HAMMER, W_MG, W_SG, W_RL, W_ARC, W_RAIL, W_PG, SPAWN_HEALTH, SPAWN_AMMO,
   ARMOR_ABSORB, AMP_FACTOR, KNOCKBACK, HITSCAN_RANGE, RESPAWN_DELAY, RESPAWN_FORCE,
   INTERMISSION_TIME,
 } from './constants.js';
@@ -26,6 +26,7 @@ export class Game {
   constructor(map, opts = {}) {
     this.map = map;
     this.world = makeWorld(map);
+    this.world.doubleJump = !!opts.doubleJump;
     this.fragLimit = opts.fragLimit ?? 20;
     this.timeLimit = (opts.timeLimit ?? 10) * 60;
     this.rng = mulberry32(opts.seed ?? (Date.now() & 0x7fffffff));
@@ -55,10 +56,10 @@ export class Game {
   addPlayer(id, name, bot = false) {
     const p = {
       id, name, bot,
-      x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, ground: false, jumpHeld: false,
+      x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, ground: false, jumpHeld: false, jumps: 0,
       yaw: 0, pitch: 0,
-      health: 0, armor: 0, weapon: W_MG, wantWeapon: W_MG, weapons: 1,
-      ammo: [0, 0, 0, 0, 0, 0], weaponTime: 0, beam: false, amp: 0,
+      health: 0, armor: 0, weapon: W_MG, wantWeapon: W_MG, weapons: 0,
+      ammo: WEAPONS.map(() => 0), weaponTime: 0, beam: false, amp: 0,
       dead: false, deadAt: 0, respawnAt: 0, frags: 0, deaths: 0,
       lastPad: -1, lastHurtBy: 0, spawnCount: 0,
     };
@@ -87,11 +88,12 @@ export class Game {
     const pick = ranked[Math.floor(this.rng() * Math.min(3, ranked.length))].s;
     p.x = pick.pos[0]; p.y = pick.pos[1]; p.z = pick.pos[2];
     p.vx = p.vy = p.vz = 0;
-    p.ground = false; p.jumpHeld = true;
+    p.ground = false; p.jumpHeld = true; p.jumps = 0;
     p.yaw = p.spawnYaw = pick.yaw; p.pitch = 0;
     p.health = SPAWN_HEALTH; p.armor = 0;
-    p.weapons = 1; p.weapon = p.wantWeapon = W_MG;
-    p.ammo = [SPAWN_AMMO, 0, 0, 0, 0, 0];
+    p.weapons = (1 << W_HAMMER) | (1 << W_MG); p.weapon = p.wantWeapon = W_MG;
+    p.ammo = WEAPONS.map(() => 0);
+    p.ammo[W_MG] = SPAWN_AMMO;
     p.weaponTime = 0; p.beam = false; p.amp = 0;
     p.dead = false;
     p.spawnCount++;
@@ -123,12 +125,12 @@ export class Game {
     const fire = (cmd.buttons & BTN_FIRE) !== 0;
     if (p.weaponTime > 0) p.weaponTime -= TICK;
     if (p.weaponTime <= 0) {
-      if (fire && p.ammo[p.wantWeapon] <= 0) p.wantWeapon = this.bestWeapon(p);
+      if (fire && !this.hasAmmo(p, p.wantWeapon)) p.wantWeapon = this.bestWeapon(p);
       if (p.wantWeapon !== p.weapon) {
         p.weapon = p.wantWeapon;
         p.weaponTime = 0.3;
-      } else if (fire && p.ammo[p.weapon] > 0) {
-        p.ammo[p.weapon]--;
+      } else if (fire && this.hasAmmo(p, p.weapon)) {
+        if (WEAPONS[p.weapon].kind !== 'melee') p.ammo[p.weapon]--;
         p.weaponTime += WEAPONS[p.weapon].reload;
         this.fire(p);
       } else {
@@ -138,9 +140,13 @@ export class Game {
     p.beam = fire && WEAPONS[p.weapon].kind === 'beam' && p.ammo[p.weapon] > 0 && !p.dead;
   }
 
+  hasAmmo(p, w) {
+    return WEAPONS[w].kind === 'melee' || p.ammo[w] > 0;
+  }
+
   bestWeapon(p) {
-    for (const w of [2, 5, 3, 1, 4, 0]) {
-      if ((p.weapons & (1 << w)) && p.ammo[w] > 0) return w;
+    for (const w of [W_RL, W_PG, W_ARC, W_SG, W_RAIL, W_MG, W_HAMMER]) {
+      if ((p.weapons & (1 << w)) && this.hasAmmo(p, w)) return w;
     }
     return p.weapon;
   }
@@ -193,7 +199,19 @@ export class Game {
     const ev = { t: 'shot', id: p.id, w: p.weapon };
     this.events.push(ev);
 
-    if (def.kind === 'bullet') {
+    if (def.kind === 'melee') {
+      // The hammer hits the nearest player in a short range. The hit area is wider than a bullet.
+      const ex = fx * def.range, ey = fy * def.range, ez = fz * def.range;
+      traceBox(this.world, ox, oy, oz, ox + ex, oy + ey, oz + ez, 0, 0, 0, tr);
+      let best = tr.f, victim = null;
+      for (const q of this.players.values()) {
+        if (q === p || q.dead) continue;
+        const t = rayBox(ox, oy, oz, ex, ey, ez,
+          q.x - PM.hx - 10, q.y + PM.minY - 10, q.z - PM.hx - 10, q.x + PM.hx + 10, q.y + PM.maxY + 10, q.z + PM.hx + 10);
+        if (t >= 0 && t <= best) { best = t; victim = q; }
+      }
+      if (victim) { ev.h = 1; this.damage(victim, p, def.damage, fx, fy, fz, p.weapon); }
+    } else if (def.kind === 'bullet') {
       // "right" and "up" are perpendicular to the aim direction.
       const rx = cy, rz = -sy;
       const ux = -sy * -sp, uy = cp, uz = -cy * -sp;
@@ -380,7 +398,7 @@ export class Game {
   // The private state of one player. The client uses it for the prediction.
   ownState(p) {
     return {
-      x: p.x, y: p.y, z: p.z, vx: p.vx, vy: p.vy, vz: p.vz, ground: p.ground, jumpHeld: p.jumpHeld,
+      x: p.x, y: p.y, z: p.z, vx: p.vx, vy: p.vy, vz: p.vz, ground: p.ground, jumpHeld: p.jumpHeld, jumps: p.jumps,
       health: p.health, armor: p.armor, weapon: p.weapon, weapons: p.weapons, ammo: p.ammo.slice(),
       amp: Math.ceil(p.amp), dead: p.dead, sc: p.spawnCount, syaw: p.spawnYaw,
     };

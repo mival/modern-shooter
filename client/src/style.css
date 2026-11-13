@@ -50,10 +50,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #05060c; col
 #health.over b, #armor.over b { color: #6fb6ff; }
 #armor { border-bottom-color: var(--warm); }
 #weapons { display: flex; gap: 4px; align-items: stretch; }
-#weapons div { width: 54px; padding: 6px 0; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; text-align: center; opacity: 0.28; display: flex; flex-direction: column; justify-content: center; }
+#weapons div { width: 50px; padding: 6px 0; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; text-align: center; opacity: 0.28; display: flex; flex-direction: column; justify-content: center; }
 #weapons div.own { opacity: 0.8; }
 #weapons div.active { opacity: 1; border-color: var(--c); box-shadow: inset 0 -3px 0 var(--c); }
-#weapons span { font-size: 11px; color: var(--c); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+#weapons span { font-size: 10px; white-space: nowrap; color: var(--c); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 #weapons b { font-size: 17px; }
 #weapons .empty b { color: var(--bad); }
 #amp { position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%); padding: 4px 14px; color: #f0a8ff;

@@ -1,5 +1,5 @@
 // Computer-controlled players (bots).
-import { PM, BTN_FIRE, BTN_JUMP, WEAPONS, TICK, W_MG, W_SG, W_RL, W_ARC, W_RAIL, W_PG, AMMO_MAX } from './constants.js';
+import { PM, BTN_FIRE, BTN_JUMP, WEAPONS, TICK, W_HAMMER, W_MG, W_SG, W_RL, W_ARC, W_RAIL, W_PG, AMMO_MAX } from './constants.js';
 import { traceBox, newTrace } from './collision.js';
 import { pmove, newMoveState, PMF_PAD } from './pmove.js';
 
@@ -170,7 +170,9 @@ export class Bot {
 
   chooseWeapon(dist) {
     const p = this.p;
-    const score = [0, 0, 0, 0, 0, 0];
+    const score = WEAPONS.map(() => 0);
+    // The hammer is the last option. A change to it at close range costs too much time.
+    score[W_HAMMER] = 1;
     score[W_MG] = 10;
     score[W_SG] = dist < 300 ? 40 : dist < 600 ? 18 : 5;
     score[W_RL] = dist < 130 ? 4 : dist < 900 ? 45 : 15;
@@ -179,7 +181,7 @@ export class Bot {
     score[W_PG] = dist < 800 ? 35 : 14;
     let best = p.weapon, bs = -1;
     for (let w = 0; w < WEAPONS.length; w++) {
-      if (!(p.weapons & (1 << w)) || p.ammo[w] <= 0) continue;
+      if (!(p.weapons & (1 << w)) || (WEAPONS[w].kind !== 'melee' && p.ammo[w] <= 0)) continue;
       if (score[w] > bs) { bs = score[w]; best = w; }
     }
     return best;
@@ -256,7 +258,7 @@ export class Bot {
       wantPitch = Math.atan2(dy, Math.hypot(dx, dz)) + this.errPitch;
       if (now - this.seenAt > 0.5 || p.weaponTime <= 0) cmd.weapon = this.chooseWeapon(dist);
       const off = Math.abs(angleDiff(wantYaw, cmd.yaw)) + Math.abs(wantPitch - cmd.pitch);
-      const inRange = def.kind !== 'beam' || dist < def.range;
+      const inRange = def.kind === 'beam' ? dist < def.range : def.kind === 'melee' ? dist < def.range + 25 : true;
       if (now - this.seenAt > this.skill.react && off < 0.12 + 20 / (dist + 1) && inRange) cmd.buttons |= BTN_FIRE;
       // Move sideways to be a more difficult target.
       if (now >= this.nextStrafe) {
@@ -266,6 +268,8 @@ export class Bot {
       }
       const sx = -dz, sz = dx, sl = Math.hypot(sx, sz) || 1;
       mx += (sx / sl) * this.strafe * 0.7; mz += (sz / sl) * this.strafe * 0.7;
+      // With the hammer, run directly to the enemy.
+      if (def.kind === 'melee') { mx = e.x - p.x; mz = e.z - p.z; }
     } else if (mx !== 0 || mz !== 0) {
       wantYaw = yawTo(mx, mz);
     }

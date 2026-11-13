@@ -4,7 +4,7 @@ Slipstream Arena is an original arena shooter for the browser.
 It uses the gameplay rules of the classic arena shooters of 1999:
 
 - Fast movement with air strafe speed gain, rocket jumps, and jump pads.
-- Six weapons, armor, health, and one power item (the Amplifier) on timers.
+- Seven weapons (a melee hammer and six guns), armor, health, and one power item (the Amplifier) on timers.
 - Free-for-all deathmatch with a frag limit and a time limit.
 - Bots for offline play and for the dedicated server.
 
@@ -43,13 +43,27 @@ Open `http://localhost:27960` in a browser. Then select "Play offline" or "Conne
 | Space | Jump |
 | Mouse | Aim |
 | Left mouse button | Fire |
-| 1 to 6, mouse wheel | Select a weapon |
+| 1 to 7, mouse wheel | Select a weapon |
 | Tab | Show the scores |
 | Enter | Chat |
 | Esc | Open the menu |
 
 To gain speed, jump again and again. In the air, hold forward and one strafe key, and turn slowly to the strafe side.
 The HUD shows the speed in units per second ("ups"). The ground speed limit is 320.
+
+## Weapons
+
+| Key | Weapon | Notes |
+| --- | --- | --- |
+| 1 | Hammer | Melee weapon. 50 damage at contact range. It uses no ammo, and each player always has it. |
+| 2 | Machine Gun | 7 damage for each bullet, 10 bullets each second. Each player starts with it. |
+| 3 | Shotgun | 11 pellets with 10 damage each. |
+| 4 | Rocket Launcher | 100 damage and splash damage. The blast pushes players (rocket jump). |
+| 5 | Arc Gun | Continuous beam with a range of 768 units. |
+| 6 | Railgun | 100 damage. The slug goes through all players on the line. |
+| 7 | Plasma Rifle | 20 damage for each ball, 10 balls each second. |
+
+If the weapon in the hand has no ammo, the game selects a different weapon. The hammer is the last option.
 
 ## Offline play
 
@@ -58,6 +72,7 @@ The menu has the bot setup for the offline mode:
 - "Bots" sets the bots to on or off.
 - "Bot count" sets the number of bots (1 to 15).
 - "Bot skill" sets the skill (1 to 5).
+- "Double jump" lets each player jump one more time in the air.
 
 During an offline game, press Esc, change the setup, and select "Apply bot setup".
 
@@ -85,6 +100,7 @@ The server stops the simulation when no human player is connected.
 | `--bots` | `BOTS` | 4 | Number of bots (0 to 15). 0 sets the bots to off. |
 | `--botskill` | `BOT_SKILL` | 3 | Bot skill (1 to 5). |
 | `--botfill` | `BOT_FILL` | on | `on`: a bot leaves when a player joins. `off`: the bot count is constant. |
+| `--doublejump` | `DOUBLE_JUMP` | off | `on`: a player can jump one more time in the air. The server sends this setting to the clients. |
 | `--fraglimit` | `FRAG_LIMIT` | 20 | Frags that end a match. 0 sets no limit. |
 | `--timelimit` | `TIME_LIMIT` | 10 | Match time in minutes. 0 sets no limit. |
 
@@ -99,6 +115,7 @@ Type these commands in the terminal of the server:
 | `status` | Show the players and the bot setup. |
 | `bots <count> [skill]` | Set the number of bots. `bots 0` sets the bots to off. |
 | `botfill <on\|off>` | Set the bot fill mode. |
+| `doublejump <on\|off>` | Set the double jump. The change applies immediately. |
 | `fraglimit <n>`, `timelimit <minutes>` | Change the match limits. |
 | `restart` | Start the match again. |
 | `say <text>` | Send a message to all players. |

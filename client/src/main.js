@@ -3,7 +3,7 @@
 import { buildMap } from '../../shared/map.js';
 import { makeWorld } from '../../shared/collision.js';
 import { pmove, newMoveState, copyMoveState, PMF_JUMPED, PMF_PAD } from '../../shared/pmove.js';
-import { TICK, PM, WEAPONS, ITEMS, GAME_ID, DEFAULT_PORT } from '../../shared/constants.js';
+import { TICK, PM, WEAPONS, ITEMS, GAME_ID, DEFAULT_PORT, W_HAMMER, W_RL } from '../../shared/constants.js';
 import { Renderer, playerColor } from './render.js';
 import { Input } from './input.js';
 import { connectLocal, connectRemote } from './net.js';
@@ -18,7 +18,7 @@ const renderer = new Renderer(canvas, map, world);
 const input = new Input(canvas);
 
 // ---------- Settings ----------
-const settings = { name: 'Player', botsOn: true, botCount: 4, botSkill: 3, fragLimit: 20, timeLimit: 10, address: '', sens: 2.2, fov: 100, volume: 0.5, quality: 'medium' };
+const settings = { name: 'Player', botsOn: true, botCount: 4, botSkill: 3, fragLimit: 20, timeLimit: 10, address: '', sens: 2.2, fov: 100, volume: 0.5, quality: 'medium', doubleJump: false };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('slipstream') || '{}')); } catch { /* Storage is not available. */ }
 function saveSettings() {
   try { localStorage.setItem('slipstream', JSON.stringify(settings)); } catch { /* Storage is not available. */ }
@@ -50,6 +50,8 @@ function bindSettings() {
   }
   $('quality').value = settings.quality;
   $('quality').addEventListener('change', () => { settings.quality = $('quality').value; saveSettings(); apply(); });
+  $('doublejump').checked = settings.doubleJump;
+  $('doublejump').addEventListener('change', () => { settings.doubleJump = $('doublejump').checked; saveSettings(); });
   $('botson').checked = settings.botsOn;
   $('botson').addEventListener('change', () => { settings.botsOn = $('botson').checked; saveSettings(); apply(); });
   apply();
@@ -95,7 +97,7 @@ function hideMenu() {
 function offlineOptions() {
   return {
     bots: settings.botsOn ? settings.botCount : 0, botSkill: settings.botSkill, botFill: false,
-    fragLimit: settings.fragLimit, timeLimit: settings.timeLimit,
+    fragLimit: settings.fragLimit, timeLimit: settings.timeLimit, doubleJump: settings.doubleJump,
   };
 }
 
@@ -131,6 +133,7 @@ function onMessage(m) {
   else if (m.t === 'welcome') {
     if (m.game !== GAME_ID) { leaveGame('This is not a Slipstream Arena server.'); return; }
     myId = m.id; joined = true; fragLimit = m.fragLimit;
+    world.doubleJump = !!m.doubleJump;
     seq = 0; pending = [];
     $('hud').hidden = false;
     hideMenu();
@@ -142,6 +145,7 @@ function onMessage(m) {
     updateScores();
   } else if (m.t === 'chat') addChat(m.name, m.text);
   else if (m.t === 'print') addChat(null, m.text);
+  else if (m.t === 'cfg') { world.doubleJump = !!m.doubleJump; addChat(null, `Double jump is ${world.doubleJump ? 'on' : 'off'}`); }
   else if (m.t === 'pong') rtt = performance.now() - m.n;
   else if (m.t === 'error') $('status').textContent = String(m.text);
 }
@@ -182,6 +186,7 @@ function onEvent(e, s) {
   const d = a ? (e.id === myId ? 0 : dist(a[1], a[2], a[3])) : 0;
   if (e.t === 'shot' && a) {
     play(WEAPONS[e.w].id, d);
+    if (e.h) play('smash', d);
     const mine = e.id === myId;
     if (mine) renderer.fireKick();
     if (e.e) {
@@ -192,7 +197,7 @@ function onEvent(e, s) {
     }
   } else if (e.t === 'boom') {
     renderer.explosion(e.p, e.w);
-    play(e.w === 2 ? 'boom' : 'fizz', dist(e.p[0], e.p[1], e.p[2]));
+    play(e.w === W_RL ? 'boom' : 'fizz', dist(e.p[0], e.p[1], e.p[2]));
   } else if (e.t === 'pickup' && a) {
     const def = ITEMS[map.items[e.i].type];
     play(def.kind === 'amp' ? 'power' : 'pickup', d);
@@ -204,7 +209,7 @@ function onEvent(e, s) {
     const v = s.pm.get(e.v);
     if (v) { renderer.burst(v[1], v[2], v[3], playerColor(e.v)); play('death', e.v === myId ? 0 : dist(v[1], v[2], v[3])); }
     addFeed(e);
-    if (e.k === myId && e.v !== myId) { center(`You fragged ${nameOf(e.v)}`, 2200); play('frag'); }
+    if (e.k === myId && e.v !== myId) { center(`You ${e.w === W_HAMMER ? 'hammered' : 'fragged'} ${nameOf(e.v)}`, 2200); play('frag'); }
     else if (e.v === myId) center(e.k && e.k !== myId ? `Fragged by ${nameOf(e.k)}` : 'You fragged yourself', 2500);
   } else if (e.t === 'jump' && a && e.id !== myId) play('jump', d);
   else if (e.t === 'pad' && a && e.id !== myId) play('pad', d);
@@ -246,7 +251,7 @@ function buildWeaponBar() {
   $('weapons').replaceChildren(...WEAPONS.map((w, i) => {
     const d = document.createElement('div'), s = document.createElement('span'), b = document.createElement('b');
     d.style.setProperty('--c', '#' + w.color.toString(16).padStart(6, '0'));
-    s.textContent = `${i + 1} ${w.id}`;
+    s.textContent = `${i + 1} ${w.id === 'hammer' ? 'ham' : w.id}`;
     d.append(s, b);
     return d;
   }));
@@ -270,14 +275,15 @@ function updateHud(now) {
   const set = (id, v) => { const b = $(id).firstElementChild; if (b.textContent !== String(v)) b.textContent = v; };
   set('health', Math.max(0, me.health));
   set('armor', me.armor);
-  set('ammo', me.ammo[me.weapon]);
+  const melee = (i) => WEAPONS[i].kind === 'melee';
+  set('ammo', melee(me.weapon) ? '∞' : me.ammo[me.weapon]);
   $('health').className = 'stat' + (me.health <= 25 ? ' low' : me.health > 100 ? ' over' : '');
   $('armor').className = 'stat' + (me.armor > 100 ? ' over' : '');
   const bar = $('weapons').children;
   for (let i = 0; i < bar.length; i++) {
     const own = (me.weapons & (1 << i)) !== 0;
-    bar[i].className = (own ? 'own' : '') + (i === me.weapon ? ' active' : '') + (own && me.ammo[i] === 0 ? ' empty' : '');
-    const t = own ? String(me.ammo[i]) : '–';
+    bar[i].className = (own ? 'own' : '') + (i === me.weapon ? ' active' : '') + (own && !melee(i) && me.ammo[i] === 0 ? ' empty' : '');
+    const t = !own ? '–' : melee(i) ? '∞' : String(me.ammo[i]);
     if (bar[i].lastChild.textContent !== t) bar[i].lastChild.textContent = t;
   }
   $('amp').hidden = !(me.amp > 0);
@@ -350,7 +356,7 @@ function interpolate(now) {
     const f = far ? 1 : k;
     const p = {
       id: q[0], x: o[1] + (q[1] - o[1]) * f, y: o[2] + (q[2] - o[2]) * f, z: o[3] + (q[3] - o[3]) * f,
-      yaw: lerpAngle(o[4], q[4], f), pitch: o[5] + (q[5] - o[5]) * f,
+      yaw: lerpAngle(o[4], q[4], f), pitch: o[5] + (q[5] - o[5]) * f, weapon: q[6],
       dead: (q[7] & 1) !== 0, beam: (q[7] & 2) !== 0, amp: (q[7] & 4) !== 0,
     };
     if (q[0] === myId) { p.x = camPos.x; p.y = camPos.y - PM.eye; p.z = camPos.z; p.yaw = input.yaw; p.pitch = input.pitch; }

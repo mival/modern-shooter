@@ -5,7 +5,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { WEAPONS, ITEMS, PM } from '../../shared/constants.js';
+import { WEAPONS, ITEMS, PM, W_HAMMER, W_RL, W_ARC, W_RAIL } from '../../shared/constants.js';
+import { buildWeaponModel } from './weapons.js';
 import { traceBox, newTrace } from '../../shared/collision.js';
 
 const SURFACE = {
@@ -97,12 +98,23 @@ export class Renderer {
     this.quality = QUALITY[opts.quality] || QUALITY.medium;
     this.composer = new EffectComposer(this.r);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
+    // The weapon in the hand has its own scene. The pass clears the depth first.
+    // Then a near wall does not cut the weapon.
+    const viewPass = new RenderPass(this.viewScene, this.viewCamera);
+    viewPass.clear = false;
+    viewPass.clearDepth = true;
+    this.composer.addPass(viewPass);
     this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.5, 0.8));
     this.composer.addPass(new OutputPass());
     this.sphere = new THREE.SphereGeometry(1, 16, 12);
     this.beamGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
     this.puffPool = []; this.beamPool = [];
-    this.projectileMats = WEAPONS.map((w, i) => new THREE.MeshBasicMaterial({ color: i === 2 ? 0xffb060 : w.color }));
+    this.skullMat = new THREE.MeshStandardMaterial({ color: 0x20242e, roughness: 0.6, metalness: 0.4 });
+    this.visorMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    this.auraMat = new THREE.MeshBasicMaterial({ color: 0xe04aff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false });
+    this.arcCoreMat = new THREE.MeshBasicMaterial({ color: 0xf2fbff });
+    this.arcGlowMat = new THREE.MeshBasicMaterial({ color: WEAPONS[W_ARC].color, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    this.projectileMats = WEAPONS.map((w, i) => new THREE.MeshBasicMaterial({ color: i === W_RL ? 0xffb060 : w.color }));
     this.warm();
     this.resize();
     window.addEventListener('resize', () => this.resize());
@@ -110,14 +122,16 @@ export class Renderer {
 
   // Makes one object of each type and compiles all shaders before the game starts.
   warm() {
-    const p = { id: -1, x: 0, y: 300, z: 0, yaw: 0, pitch: 0, dead: false, beam: true, amp: true };
+    const p = { id: -1, x: 0, y: 300, z: 0, yaw: 0, pitch: 0, weapon: W_ARC, dead: false, beam: true, amp: true };
     this.setPlayers([p], 0);
-    this.setProjectiles([{ id: -1, w: 2, x: 0, y: 300, z: 0 }]);
+    this.setProjectiles([{ id: -1, w: W_RL, x: 0, y: 300, z: 0 }]);
     this.puff(0, 300, 0, 0xffffff, 1, 1);
     this.beamEffect({ x: 0, y: 300, z: 0 }, [0, 310, 0], 0xffffff, 1, 1);
     this.view.visible = true;
-    this.setViewWeapon(0);
+    this.viewModels.forEach((m) => { m.visible = true; });
     this.r.compile(this.scene, this.camera);
+    this.r.compile(this.viewScene, this.viewCamera);
+    this.viewModels.forEach((m) => { m.visible = false; });
     this.setPlayers([], 0);
     this.setProjectiles([]);
     for (const e of this.effects) { e.obj.visible = false; e.pool.push(e.obj); }
@@ -138,6 +152,8 @@ export class Renderer {
     this.composer.setPixelRatio(ratio);
     this.composer.setSize(w, h);
     this.camera.aspect = w / h;
+    this.viewCamera.aspect = w / h;
+    this.viewCamera.updateProjectionMatrix();
     this.setFov(this.fov || 100);
   }
 
@@ -244,14 +260,14 @@ export class Renderer {
         m = new THREE.Mesh(new THREE.OctahedronGeometry(s), glow(c));
         m.scale.y = 1.25;
       } else if (d.kind === 'weapon') {
-        const c = WEAPONS[d.weapon].color;
         m = new THREE.Group();
-        const gun = new THREE.Mesh(new THREE.BoxGeometry(34, 7, 7), glow(c));
-        const grip = new THREE.Mesh(new THREE.BoxGeometry(6, 12, 6), glow(0x444a5a, 0.2));
-        grip.position.set(-9, -8, 0);
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(22, 1.2, 6, 28), new THREE.MeshBasicMaterial({ color: c }));
+        const gun = buildWeaponModel(d.weapon);
+        gun.scale.setScalar(1.7);
+        gun.rotation.y = Math.PI / 2;
+        gun.position.x = -6;
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(22, 1.2, 6, 28), new THREE.MeshBasicMaterial({ color: WEAPONS[d.weapon].color }));
         ring.rotation.x = Math.PI / 2; ring.position.y = -20;
-        m.add(gun, grip, ring);
+        m.add(gun, ring);
       } else if (d.kind === 'ammo') {
         m = new THREE.Mesh(new THREE.BoxGeometry(12, 9, 12), glow(WEAPONS[d.weapon].color, 0.6));
       } else {
@@ -265,34 +281,34 @@ export class Renderer {
   }
 
   buildViewModel() {
+    this.viewScene = new THREE.Scene();
+    this.viewCamera = new THREE.PerspectiveCamera(55, 1, 0.5, 300);
+    this.viewScene.add(new THREE.HemisphereLight(0xd4dcff, 0x3a3048, 2.6));
+    const key = new THREE.DirectionalLight(0xffffff, 2.2);
+    key.position.set(-3, 6, 4);
+    this.viewScene.add(key);
     this.view = new THREE.Group();
-    this.viewBody = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0x3a4152, roughness: 0.5, metalness: 0.5 }));
-    this.viewGlow = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-    this.viewFlash = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-    // Draw the weapon after the arena and without the depth test.
-    // Then a near wall does not cut the weapon.
-    [this.viewBody, this.viewGlow, this.viewFlash].forEach((m, i) => {
-      m.material.depthTest = false;
-      m.renderOrder = 10 + i;
+    this.viewModels = WEAPONS.map((w, i) => {
+      const m = buildWeaponModel(i);
+      m.visible = false;
+      this.view.add(m);
+      return m;
     });
-    this.view.add(this.viewBody, this.viewGlow, this.viewFlash);
-    this.camera.add(this.view);
+    this.viewFlash = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    this.view.add(this.viewFlash);
+    this.viewScene.add(this.view);
   }
 
   setViewWeapon(w) {
     if (w === this.viewWeapon) return;
     this.viewWeapon = w;
-    const shape = [[3, 3.2, 16], [4.2, 3.4, 15], [5, 5, 19], [3.4, 4.4, 14], [2.6, 3.6, 24], [4, 4.4, 15]][w];
-    this.viewBody.scale.set(shape[0], shape[1], shape[2]);
-    this.viewGlow.scale.set(shape[0] * 0.5, 0.6, shape[2] * 0.8);
-    this.viewGlow.position.set(0, shape[1] / 2 + 0.2, -1);
-    this.viewGlow.material.color.setHex(WEAPONS[w].color);
+    this.viewModels.forEach((m, i) => { m.visible = i === w; });
     this.viewFlash.material.color.setHex(WEAPONS[w].color);
-    this.viewFlash.position.set(0, 0, -shape[2] / 2 - 2);
+    this.viewFlash.position.set(0, 0.4, this.viewModels[w].userData.muzzle - 1);
     this.lower = 1;
   }
 
-  // The local player fired. Moves the weapon back for a short time.
+  // The local player fired. Moves the weapon for a short time.
   fireKick() { this.kick = 1; }
 
   setName(id, name) { this.names.set(id, name); }
@@ -303,28 +319,22 @@ export class Renderer {
     const color = playerColor(id);
     const group = new THREE.Group();
     const suit = new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.3, emissive: color, emissiveIntensity: 0.25 });
-    const dark = new THREE.MeshStandardMaterial({ color: 0x20242e, roughness: 0.6, metalness: 0.4 });
     const body = new THREE.Mesh(new THREE.CapsuleGeometry(12, 20, 4, 12), suit);
     body.position.y = -2;
     const head = new THREE.Group();
     head.position.y = 24;
-    const skull = new THREE.Mesh(new THREE.SphereGeometry(8.5, 14, 10), dark);
-    const visor = new THREE.Mesh(new THREE.BoxGeometry(11, 3.5, 4), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    const skull = new THREE.Mesh(new THREE.SphereGeometry(8.5, 14, 10), this.skullMat);
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(11, 3.5, 4), this.visorMat);
     visor.position.set(0, 1, -7);
-    const gun = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 22), dark);
-    gun.position.set(9, -6, -12);
-    head.add(skull, visor, gun);
-    const aura = new THREE.Mesh(new THREE.SphereGeometry(30, 14, 10), new THREE.MeshBasicMaterial({ color: 0xe04aff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }));
+    head.add(skull, visor);
+    const aura = new THREE.Mesh(new THREE.SphereGeometry(30, 14, 10), this.auraMat);
     aura.visible = false;
     const label = labelSprite(this.names.get(id) || '', '#' + color.getHexString());
     label.position.y = 48;
     group.add(body, head, aura, label);
-    const beam = new THREE.Line(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(30), 3)),
-      new THREE.LineBasicMaterial({ color: WEAPONS[3].color }));
-    beam.frustumCulled = false;
-    beam.visible = false;
+    const beam = this.makeBeam();
     this.scene.add(group, beam);
-    o = { group, head, aura, beam, label, labelText: this.names.get(id) || '' };
+    o = { group, head, aura, beam, label, labelText: this.names.get(id) || '', gun: null, gunWeapon: -1 };
     this.players.set(id, o);
     return o;
   }
@@ -336,7 +346,7 @@ export class Renderer {
     this.players.delete(id);
   }
 
-  // "list" has one entry for each player: { id, x, y, z, yaw, pitch, dead, beam, amp }.
+  // "list" has one entry for each player: { id, x, y, z, yaw, pitch, weapon, dead, beam, amp }.
   setPlayers(list, myId) {
     const seen = new Set();
     for (const p of list) {
@@ -350,6 +360,14 @@ export class Renderer {
         o.group.add(o.label);
         o.labelText = name;
       }
+      if (p.weapon !== o.gunWeapon) {
+        // Show the weapon that the player holds.
+        if (o.gun) o.head.remove(o.gun);
+        o.gun = buildWeaponModel(p.weapon);
+        o.gun.position.set(10, -7, -4);
+        o.head.add(o.gun);
+        o.gunWeapon = p.weapon;
+      }
       const mine = p.id === myId;
       o.group.visible = !p.dead && !mine;
       o.group.position.set(p.x, p.y, p.z);
@@ -362,18 +380,52 @@ export class Renderer {
     for (const id of [...this.players.keys()]) if (!seen.has(id)) this.removePlayerObject(id);
   }
 
-  updateBeam(line, p, mine) {
-    const cp = Math.cos(p.pitch), range = WEAPONS[3].range;
+  // The beam of the Arc Gun: a bright core, a wide glow, and a light ball at each end.
+  makeBeam() {
+    const g = new THREE.Group();
+    g.userData.core = []; g.userData.glow = [];
+    for (let i = 0; i < 9; i++) {
+      const core = new THREE.Mesh(this.beamGeo, this.arcCoreMat), glow = new THREE.Mesh(this.beamGeo, this.arcGlowMat);
+      g.userData.core.push(core); g.userData.glow.push(glow);
+      g.add(core, glow);
+    }
+    g.userData.start = new THREE.Mesh(this.sphere, this.arcGlowMat);
+    g.userData.end = new THREE.Mesh(this.sphere, this.arcGlowMat);
+    g.userData.spark = new THREE.Mesh(this.sphere, this.arcCoreMat);
+    g.add(g.userData.start, g.userData.end, g.userData.spark);
+    g.traverse((m) => { m.frustumCulled = false; });
+    g.visible = false;
+    return g;
+  }
+
+  updateBeam(beam, p, mine) {
+    const cp = Math.cos(p.pitch), range = WEAPONS[W_ARC].range;
     const dx = -Math.sin(p.yaw) * cp, dy = Math.sin(p.pitch), dz = -Math.cos(p.yaw) * cp;
     const ox = p.x, oy = p.y + PM.eye, oz = p.z;
     traceBox(this.world, ox, oy, oz, ox + dx * range, oy + dy * range, oz + dz * range, 0, 0, 0, tr);
     const a = this.muzzle(p, mine, v1);
-    const pos = line.geometry.attributes.position;
-    for (let i = 0; i < 10; i++) {
-      const k = i / 9, j = i === 0 || i === 9 ? 0 : 7;
-      pos.setXYZ(i, a.x + (tr.x - a.x) * k + (Math.random() - 0.5) * j, a.y + (tr.y - a.y) * k + (Math.random() - 0.5) * j, a.z + (tr.z - a.z) * k + (Math.random() - 0.5) * j);
+    const u = beam.userData;
+    // The beam is a line of 9 parts. Random offsets make it look electric.
+    let px = a.x, py = a.y, pz = a.z;
+    for (let i = 1; i <= 9; i++) {
+      const k = i / 9, j = i === 9 ? 0 : 9;
+      const x = a.x + (tr.x - a.x) * k + (Math.random() - 0.5) * j;
+      const y = a.y + (tr.y - a.y) * k + (Math.random() - 0.5) * j;
+      const z = a.z + (tr.z - a.z) * k + (Math.random() - 0.5) * j;
+      v2.set(x - px, y - py, z - pz);
+      const len = v2.length() || 1;
+      v2.multiplyScalar(1 / len);
+      for (const [m, w] of [[u.core[i - 1], 0.55], [u.glow[i - 1], 1.5]]) {
+        m.position.set((px + x) / 2, (py + y) / 2, (pz + z) / 2);
+        m.quaternion.setFromUnitVectors(UP, v2);
+        m.scale.set(w, len, w);
+      }
+      px = x; py = y; pz = z;
     }
-    pos.needsUpdate = true;
+    const f = 0.8 + Math.random() * 0.5;
+    u.start.position.copy(a); u.start.scale.setScalar(1.4 * f);
+    u.end.position.set(tr.x, tr.y, tr.z); u.end.scale.setScalar(7 * f);
+    u.spark.position.set(tr.x, tr.y, tr.z); u.spark.scale.setScalar(3 * f);
   }
 
   // Returns the point where the shots of a player start.
@@ -391,12 +443,12 @@ export class Renderer {
       let m = this.projectiles.get(q.id);
       if (!m) {
         m = new THREE.Mesh(this.sphere, this.projectileMats[q.w]);
-        m.scale.setScalar(q.w === 2 ? 5 : 4);
+        m.scale.setScalar(q.w === W_RL ? 5 : 4);
         this.scene.add(m);
         this.projectiles.set(q.id, m);
       }
       m.position.set(q.x, q.y, q.z);
-      if (q.w === 2 && Math.random() < 0.5) this.puff(q.x, q.y, q.z, 0x8a8f9c, 6, 0.45, 0.35);
+      if (q.w === W_RL && Math.random() < 0.5) this.puff(q.x, q.y, q.z, 0x8a8f9c, 6, 0.45, 0.35);
     }
     for (const [id, m] of this.projectiles) if (!seen.has(id)) { this.scene.remove(m); this.projectiles.delete(id); }
   }
@@ -428,7 +480,7 @@ export class Renderer {
   }
 
   explosion(p, weapon) {
-    const rocket = weapon === 2;
+    const rocket = weapon === W_RL;
     this.puff(p[0], p[1], p[2], rocket ? 0xffa040 : WEAPONS[weapon].color, rocket ? 28 : 7, rocket ? 0.45 : 0.2, 0.9, rocket ? 2.4 : 1.5);
     if (rocket) {
       this.puff(p[0], p[1], p[2], 0xffffff, 14, 0.18, 1, 2);
@@ -457,7 +509,7 @@ export class Renderer {
     const color = WEAPONS[weapon].color;
     for (let i = 0; i < ends.length; i += 3) {
       const b = [ends[i], ends[i + 1], ends[i + 2]];
-      if (weapon === 4) {
+      if (weapon === W_RAIL) {
         this.beamEffect(a, b, color, 2.2, 0.8);
         this.beamEffect(a, b, 0xffffff, 0.7, 0.4);
         this.puff(b[0], b[1], b[2], color, 8, 0.5);
@@ -501,13 +553,21 @@ export class Renderer {
       this.setViewWeapon(view.weapon);
       this.kick = Math.max(0, this.kick - dt * 9);
       this.lower = Math.max(0, (this.lower || 0) - dt * 5);
-      const bob = Math.sin(t * 9) * Math.min(1, view.speed / 320) * (view.ground ? 0.35 : 0);
-      this.view.position.set(8, -8 + bob - this.lower * 8, -22 + this.kick * 2.5);
-      this.view.rotation.x = this.kick * 0.08 - this.lower * 0.6;
-      this.viewFlash.material.opacity = this.kick > 0.6 ? 0.9 : 0;
-      this.viewFlash.scale.setScalar(2 + this.kick * 2);
+      const bob = Math.sin(t * 9) * Math.min(1, view.speed / 320) * (view.ground ? 0.3 : 0);
+      const melee = view.weapon === W_HAMMER;
+      // The hammer swings down. The other weapons move back.
+      this.view.position.set(8.5, -7.5 + bob - this.lower * 8, -27 + (melee ? -this.kick * 3 : this.kick * 2));
+      this.view.rotation.set(melee ? 0.75 - Math.sin(this.kick * Math.PI) * 1.3 : this.kick * 0.07 - this.lower * 0.6, melee ? 0.25 : 0.06, 0);
+      this.viewFlash.material.opacity = !melee && this.kick > 0.6 ? 0.9 : 0;
+      this.viewFlash.scale.setScalar(1.6 + this.kick * 1.6);
     }
     if (this.quality.bloom) this.composer.render(dt);
-    else this.r.render(this.scene, this.camera);
+    else {
+      this.r.render(this.scene, this.camera);
+      this.r.autoClear = false;
+      this.r.clearDepth();
+      this.r.render(this.viewScene, this.viewCamera);
+      this.r.autoClear = true;
+    }
   }
 }

@@ -26,16 +26,19 @@ export const PM = {
 export const BTN_FIRE = 1;
 export const BTN_JUMP = 2;
 
-export const W_MG = 0;
-export const W_SG = 1;
-export const W_RL = 2;
-export const W_ARC = 3;
-export const W_RAIL = 4;
-export const W_PG = 5;
+export const W_HAMMER = 0;
+export const W_MG = 1;
+export const W_SG = 2;
+export const W_RL = 3;
+export const W_ARC = 4;
+export const W_RAIL = 5;
+export const W_PG = 6;
 
 export const AMMO_MAX = 200;
 
+// The hammer is a melee weapon. It uses no ammo, and each player always has it.
 export const WEAPONS = [
+  { id: 'hammer', name: 'Hammer', kind: 'melee', damage: 50, reload: 0.4, range: 56, color: 0xdfe6f5 },
   { id: 'mg', name: 'Machine Gun', kind: 'bullet', damage: 7, reload: 0.1, spread: 0.025, pellets: 1, ammoGive: 50, ammoBox: 50, color: 0xffd24a },
   { id: 'sg', name: 'Shotgun', kind: 'bullet', damage: 10, reload: 1.0, spread: 0.085, pellets: 11, ammoGive: 10, ammoBox: 10, color: 0xff8a3c },
   { id: 'rl', name: 'Rocket Launcher', kind: 'projectile', damage: 100, splash: 100, radius: 120, speed: 900, reload: 0.8, ammoGive: 10, ammoBox: 5, color: 0xff4444 },
@@ -66,6 +69,7 @@ export const ITEMS = {
   amp: { kind: 'amp', duration: 30, respawn: 120, firstSpawn: 30, label: 'Amplifier' },
 };
 WEAPONS.forEach((w, i) => {
+  if (w.kind === 'melee') return;
   ITEMS['weapon_' + w.id] = { kind: 'weapon', weapon: i, respawn: 5, label: w.name };
   ITEMS['ammo_' + w.id] = { kind: 'ammo', weapon: i, respawn: 40, label: w.name + ' ammo' };
 });

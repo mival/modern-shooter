@@ -10,7 +10,7 @@ export function makeWorld(map) {
     b.set(br.min, i * 6);
     b.set(br.max, i * 6 + 3);
   });
-  return { b, n, pads: map.pads };
+  return { b, n, pads: map.pads, doubleJump: false };
 }
 
 export function newTrace() {

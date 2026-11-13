@@ -68,6 +68,7 @@ export class GameHost {
         t: 'welcome', game: GAME_ID, id: c.player.id, server: this.name,
         tickRate: TICK_RATE, snapEvery: SNAP_EVERY,
         fragLimit: this.game.fragLimit, timeLimit: this.game.timeLimit,
+        doubleJump: this.game.world.doubleJump,
       });
       this.log(`${name} joined (id ${c.player.id})`);
       this.print(`${name} entered the arena`);
@@ -123,6 +124,11 @@ export class GameHost {
     this.balanceBots();
   }
 
+  setDoubleJump(on) {
+    this.game.world.doubleJump = !!on;
+    this.broadcast({ t: 'cfg', doubleJump: this.game.world.doubleJump });
+  }
+
   removeBot(id) {
     this.bots.delete(id);
     this.game.removePlayer(id);
@@ -176,6 +182,7 @@ export class GameHost {
     return {
       game: GAME_ID, name: this.name, map: this.game.map.name,
       players: this.humanCount(), maxClients: this.maxClients, bots: this.bots.size,
+      doubleJump: this.game.world.doubleJump,
     };
   }
 }

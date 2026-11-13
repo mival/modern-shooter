@@ -6,11 +6,11 @@ import { pmove, newMoveState } from '../shared/pmove.js';
 import { Game } from '../shared/game.js';
 import { GameHost } from '../shared/host.js';
 import { buildNav } from '../shared/bot.js';
-import { TICK, PM, BTN_JUMP, BTN_FIRE, W_RL } from '../shared/constants.js';
+import { TICK, PM, BTN_JUMP, BTN_FIRE, W_RL, W_HAMMER, W_MG } from '../shared/constants.js';
 
 const map = buildMap();
 const world = makeWorld(map);
-const cmd = (o = {}) => ({ seq: 0, fwd: 0, side: 0, buttons: 0, yaw: 0, pitch: 0, weapon: 0, ...o });
+const cmd = (o = {}) => ({ seq: 0, fwd: 0, side: 0, buttons: 0, yaw: 0, pitch: 0, weapon: -1, ...o });
 
 function stand(x, z) {
   const p = newMoveState();
@@ -83,6 +83,51 @@ test('a rocket jump goes higher than a normal jump', () => {
   for (let i = 0; i < 90; i++) { g.runCmd(p, cmd({ weapon: W_RL, pitch: -1.5 })); g.tick(); top = Math.max(top, p.y); }
   assert.ok(top - 24 > 150, `height ${top - 24}`);
   assert.ok(p.health < 125 && p.health > 0);
+});
+
+test('the double jump works only with the server option', () => {
+  const height = (doubleJump) => {
+    const w = makeWorld(map);
+    w.doubleJump = doubleJump;
+    const p = newMoveState();
+    p.x = 0; p.y = 24; p.z = 600;
+    for (let i = 0; i < 30; i++) pmove(p, cmd(), w, TICK);
+    let top = p.y;
+    for (let i = 0; i < 120; i++) {
+      // Press jump at tick 0, tick 15 and tick 30.
+      pmove(p, cmd({ buttons: i === 0 || i === 15 || i === 30 ? BTN_JUMP : 0 }), w, TICK);
+      top = Math.max(top, p.y);
+    }
+    return top - 24;
+  };
+  const off = height(false), on = height(true);
+  assert.ok(off > 40 && off < 48, `off ${off}`);
+  assert.ok(on > 75 && on < 130, `on ${on}`);
+});
+
+test('the hammer needs no ammo and hits only at close range', () => {
+  const g = new Game(buildMap(), { seed: 1 });
+  const a = g.addPlayer(1, 'a'), b = g.addPlayer(2, 'b');
+  assert.ok(a.weapons & (1 << W_HAMMER));
+  const place = (dist) => {
+    a.x = 0; a.y = 24; a.z = 600; b.x = 0; b.y = 24; b.z = 600 - dist;
+    a.vx = a.vy = a.vz = b.vx = b.vy = b.vz = 0; b.health = 100; b.armor = 0; a.weaponTime = 0;
+  };
+  place(50);
+  for (let i = 0; i < 30; i++) { g.runCmd(a, cmd({ weapon: W_HAMMER })); g.tick(); }
+  assert.equal(a.weapon, W_HAMMER);
+  place(50);
+  g.runCmd(a, cmd({ buttons: BTN_FIRE })); g.tick();
+  assert.equal(b.health, 50);
+  place(120);
+  g.runCmd(a, cmd({ buttons: BTN_FIRE })); g.tick();
+  assert.equal(b.health, 100);
+  // With no ammo, the game selects the hammer.
+  a.ammo[W_MG] = 0; a.weaponTime = 0;
+  g.runCmd(a, cmd({ weapon: W_MG })); for (let i = 0; i < 30; i++) { g.runCmd(a, cmd()); g.tick(); }
+  assert.equal(a.weapon, W_MG);
+  g.runCmd(a, cmd({ buttons: BTN_FIRE })); g.tick();
+  assert.equal(a.weapon, W_HAMMER);
 });
 
 test('the bots can go from each spawn point to each item', () => {

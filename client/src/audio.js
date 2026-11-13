@@ -55,6 +55,8 @@ function noise(filter, f0, f1, dur, vol) {
 }
 
 const SOUNDS = {
+  hammer: (v) => { noise('bandpass', 500, 1600, 0.16, v * 0.45); },
+  smash: (v) => { noise('lowpass', 900, 120, 0.2, v * 0.9); tone('square', 150, 50, 0.14, v * 0.5); },
   mg: (v) => { noise('highpass', 1800, 900, 0.07, v * 0.5); tone('square', 220, 90, 0.06, v * 0.25); },
   sg: (v) => { noise('lowpass', 2600, 300, 0.28, v * 0.9); tone('sawtooth', 140, 50, 0.2, v * 0.4); },
   rl: (v) => { noise('bandpass', 500, 1500, 0.35, v * 0.7); tone('sine', 120, 60, 0.3, v * 0.5); },

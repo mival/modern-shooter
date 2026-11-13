@@ -18,6 +18,7 @@ const OPTIONS = {
   bots: { env: 'BOTS', def: 4, help: 'Number of bots. 0 sets the bots to off' },
   botskill: { env: 'BOT_SKILL', def: 3, help: 'Bot skill from 1 to 5' },
   botfill: { env: 'BOT_FILL', def: 'on', help: 'on: a bot leaves when a player joins. off: the bot count is constant' },
+  doublejump: { env: 'DOUBLE_JUMP', def: 'off', help: 'on: a player can jump one more time in the air' },
   fraglimit: { env: 'FRAG_LIMIT', def: 20, help: 'Frags that end a match. 0 sets no limit' },
   timelimit: { env: 'TIME_LIMIT', def: 10, help: 'Match time in minutes. 0 sets no limit' },
 };
@@ -49,6 +50,7 @@ function readOptions() {
     port: num('port', 1, 65535), host: String(o.host), name: String(o.name),
     maxClients: num('maxclients', 1, 32), bots: num('bots', 0, 15), botSkill: num('botskill', 1, 5),
     botFill: !/^(off|0|false|no)$/i.test(String(o.botfill)),
+    doubleJump: /^(on|1|true|yes)$/i.test(String(o.doublejump)),
     fragLimit: num('fraglimit', 0, 1000), timeLimit: num('timelimit', 0, 600),
   };
 }
@@ -142,11 +144,11 @@ setInterval(() => {
 // ---------- Console ----------
 const COMMANDS = {
   help() {
-    console.log('status | bots <count> [skill 1-5] | botfill <on|off> | fraglimit <n> | timelimit <minutes> | restart | say <text> | quit');
+    console.log('status | bots <count> [skill 1-5] | botfill <on|off> | doublejump <on|off> | fraglimit <n> | timelimit <minutes> | restart | say <text> | quit');
   },
   status() {
     const s = game.status();
-    console.log(`${s.name} | map ${s.map} | players ${s.players}/${s.maxClients} | bots ${s.bots} (target ${game.botCount}, skill ${game.botSkill}, fill ${game.botFill ? 'on' : 'off'})`);
+    console.log(`${s.name} | map ${s.map} | players ${s.players}/${s.maxClients} | bots ${s.bots} (target ${game.botCount}, skill ${game.botSkill}, fill ${game.botFill ? 'on' : 'off'}) | double jump ${s.doubleJump ? 'on' : 'off'}`);
     for (const p of game.game.scores()) console.log(`  ${String(p.id).padStart(3)} ${p.name.padEnd(16)} ${p.bot ? 'bot  ' : 'human'} frags ${p.frags} deaths ${p.deaths}`);
   },
   bots(count, skill) {
@@ -158,6 +160,10 @@ const COMMANDS = {
   botfill(v) {
     game.setBots(game.botCount, undefined, v === 'on');
     console.log(`Bot fill: ${game.botFill ? 'on' : 'off'}`);
+  },
+  doublejump(v) {
+    if (v === 'on' || v === 'off') game.setDoubleJump(v === 'on');
+    console.log(`Double jump: ${game.game.world.doubleJump ? 'on' : 'off'}`);
   },
   fraglimit(v) { if (Number(v) >= 0) game.game.fragLimit = Number(v) | 0; console.log(`Frag limit: ${game.game.fragLimit}`); },
   timelimit(v) { if (Number(v) >= 0) game.game.timeLimit = (Number(v) | 0) * 60; console.log(`Time limit: ${game.game.timeLimit / 60} minutes`); },
@@ -187,5 +193,5 @@ process.on('SIGTERM', shutdown);
 
 server.listen(opts.port, opts.host, () => {
   log(`${opts.name}: listening on http://${opts.host}:${opts.port}`);
-  log(`Bots ${opts.bots} (skill ${opts.botSkill}, fill ${opts.botFill ? 'on' : 'off'}), frag limit ${opts.fragLimit}, time limit ${opts.timeLimit} min, max clients ${opts.maxClients}`);
+  log(`Bots ${opts.bots} (skill ${opts.botSkill}, fill ${opts.botFill ? 'on' : 'off'}), frag limit ${opts.fragLimit}, time limit ${opts.timeLimit} min, max clients ${opts.maxClients}, double jump ${opts.doubleJump ? 'on' : 'off'}`);
 });

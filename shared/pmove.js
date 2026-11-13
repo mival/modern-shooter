@@ -10,13 +10,13 @@ export const PMF_LANDED = 4;
 const tr = newTrace();
 
 export function newMoveState() {
-  return { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, ground: false, jumpHeld: false };
+  return { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, ground: false, jumpHeld: false, jumps: 0 };
 }
 
 export function copyMoveState(to, from) {
   to.x = from.x; to.y = from.y; to.z = from.z;
   to.vx = from.vx; to.vy = from.vy; to.vz = from.vz;
-  to.ground = from.ground; to.jumpHeld = from.jumpHeld;
+  to.ground = from.ground; to.jumpHeld = from.jumpHeld; to.jumps = from.jumps;
   return to;
 }
 
@@ -105,9 +105,16 @@ export function pmove(p, cmd, w, dt) {
   groundCheck(p, w);
   const jump = (cmd.buttons & BTN_JUMP) !== 0;
   if (!jump) p.jumpHeld = false;
-  if (p.ground && jump && !p.jumpHeld) {
-    p.vy = PM.jumpVel; p.ground = false; p.jumpHeld = true;
-    flags |= PMF_JUMPED;
+  if (p.ground) p.jumps = 0;
+  if (jump && !p.jumpHeld) {
+    if (p.ground) {
+      p.vy = PM.jumpVel; p.ground = false; p.jumpHeld = true;
+      flags |= PMF_JUMPED;
+    } else if (w.doubleJump && p.jumps < 1) {
+      // Double jump: one more jump in the air. The server option sets "w.doubleJump".
+      p.vy = (p.vy > 0 ? p.vy : 0) + PM.jumpVel; p.jumps++; p.jumpHeld = true;
+      flags |= PMF_JUMPED;
+    }
   }
   if (p.ground) {
     friction(p, dt);

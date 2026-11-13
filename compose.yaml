@@ -13,5 +13,7 @@ services:
       BOT_SKILL: "3"
       # "on": a bot leaves when a player joins. "off": the bot count is constant.
       BOT_FILL: "on"
+      # "on": a player can jump one more time in the air.
+      DOUBLE_JUMP: "off"
       FRAG_LIMIT: "20"
       TIME_LIMIT: "10"
