@@ -463,7 +463,7 @@ fetch('status').then((r) => (r.ok ? r.json() : null)).then((s) => {
 }).catch(() => {});
 
 // The "debug" parameter gives test scripts access to the input and the renderer.
-if (params.has('debug')) window.game = { input, renderer };
+if (params.has('debug')) window.game = { input, renderer, get conn() { return conn; }, get myId() { return myId; } };
 if (params.has('offline')) startOffline();
 else if (params.has('connect')) startOnline(params.get('connect'));
 requestAnimationFrame(frame);
