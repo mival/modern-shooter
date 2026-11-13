@@ -26,6 +26,7 @@ const OPTIONS = {
   maps: { env: 'MAPS', def: MAP_IDS.join(','), help: `Map rotation, a list with commas. The first map starts. Maps: ${MAP_IDS.join(', ')}` },
   votes: { env: 'VOTES', def: 'on', help: 'on: players can vote to change the map and other settings' },
   spawnprotect: { env: 'SPAWN_PROTECT', def: 2, help: 'Seconds without damage after a spawn. 0 sets it to off' },
+  config: { env: 'CONFIG_FILE', def: '', help: 'File that keeps the settings that change during a game. Empty: the server does not save them' },
   rconpassword: { env: 'RCON_PASSWORD', def: '', help: 'Password for the remote console, 8 characters or more. Empty sets the remote console to off' },
 };
 
@@ -63,7 +64,7 @@ function readOptions() {
     process.exit(1);
   }
   return {
-    rconPassword, maps,
+    rconPassword, maps, configFile: String(o.config),
     port: num('port', 1, 65535), host: String(o.host), name: String(o.name),
     maxClients: num('maxclients', 1, 32), bots: num('bots', 0, 15), botSkill: num('botskill', 1, 5),
     botFill: !/^(off|0|false|no)$/i.test(String(o.botfill)),
@@ -75,7 +76,39 @@ function readOptions() {
 
 const opts = readOptions();
 const log = (text) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${text}`);
-const game = new GameHost({ ...opts, rconPassword: undefined, log });
+const game = new GameHost({ ...opts, rconPassword: undefined, configFile: undefined, log });
+
+// ---------- Saved settings ----------
+// A change from the console, the remote console, or a vote goes into the config file.
+// At the start, a saved setting is stronger than a start option.
+function loadSettings() {
+  if (!opts.configFile || !fs.existsSync(opts.configFile)) return;
+  try {
+    const saved = JSON.parse(fs.readFileSync(opts.configFile, 'utf8'));
+    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) throw new Error('the content is not an object');
+    game.applySettings(saved, false);
+    if (!game.rotation.includes(game.mapId)) game.changeMap(game.rotation[0]);
+    log(`Settings loaded from ${opts.configFile}: ${JSON.stringify(game.getSettings())}`);
+  } catch (e) {
+    log(`Could not read ${opts.configFile}: ${e.message}. The server uses the start options.`);
+  }
+}
+
+function saveSettings(settings) {
+  if (!opts.configFile) return;
+  // Write a temporary file, then rename it. Then a stop during the write does not damage the file.
+  const tmp = `${opts.configFile}.tmp`;
+  try {
+    fs.mkdirSync(path.dirname(path.resolve(opts.configFile)), { recursive: true });
+    fs.writeFileSync(tmp, JSON.stringify(settings, null, 2) + '\n');
+    fs.renameSync(tmp, opts.configFile);
+  } catch (e) {
+    log(`Could not save the settings to ${opts.configFile}: ${e.message}`);
+  }
+}
+
+loadSettings();
+game.onSettings = saveSettings;
 
 // ---------- HTTP ----------
 const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');
@@ -183,7 +216,7 @@ setInterval(() => {
 // ---------- Commands ----------
 // The local console and the remote console (rcon) use the same commands.
 // "out" is a function that writes one line of the answer.
-const HELP = 'status | bots <count> [skill 1-5] | botfill <on|off> | doublejump <on|off> | fraglimit <n> | timelimit <minutes> | spawnprotect <seconds> | map <id> | nextmap | maps [id,id] | votes <on|off> | restart | kick <player id> | say <text> | quit';
+const HELP = 'status | bots <count> [skill 1-5] | botfill <on|off> | doublejump <on|off> | fraglimit <n> | timelimit <minutes> | spawnprotect <seconds> | map <id> | nextmap | maps [id,id] | votes <on|off> | resetconfig | restart | kick <player id> | say <text> | quit';
 const COMMANDS = {
   help(out) { out(HELP); },
   status(out) {
@@ -240,6 +273,11 @@ const COMMANDS = {
   votes(out, v) {
     if (v === 'on' || v === 'off') game.applySettings({ votes: v === 'on' });
     out(`Votes: ${game.votesOn ? 'on' : 'off'}`);
+  },
+  resetconfig(out) {
+    if (!opts.configFile) return out('The server has no config file.');
+    try { fs.rmSync(opts.configFile, { force: true }); } catch (e) { return out(`Could not remove ${opts.configFile}: ${e.message}`); }
+    out(`Removed ${opts.configFile}. The server uses its start options after the next start.`);
   },
   restart(out) { game.game.restart(); out('The match starts again.'); },
   kick(out, id) {
@@ -310,5 +348,5 @@ process.on('SIGTERM', shutdown);
 
 server.listen(opts.port, opts.host, () => {
   log(`${opts.name}: listening on http://${opts.host}:${opts.port}`);
-  log(`Bots ${opts.bots} (skill ${opts.botSkill}, fill ${opts.botFill ? 'on' : 'off'}), frag limit ${opts.fragLimit}, time limit ${opts.timeLimit} min, max clients ${opts.maxClients}, maps ${opts.maps.join(',')}, double jump ${opts.doubleJump ? 'on' : 'off'}, remote console ${opts.rconPassword ? 'on' : 'off'}`);
+  log(`Bots ${opts.bots} (skill ${opts.botSkill}, fill ${opts.botFill ? 'on' : 'off'}), frag limit ${opts.fragLimit}, time limit ${opts.timeLimit} min, max clients ${opts.maxClients}, maps ${opts.maps.join(',')}, double jump ${opts.doubleJump ? 'on' : 'off'}, remote console ${opts.rconPassword ? 'on' : 'off'}, config file ${opts.configFile || 'none'}`);
 });

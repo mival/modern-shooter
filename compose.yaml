@@ -3,6 +3,9 @@ services:
     build: .
     image: slipstream-arena
     restart: unless-stopped
+    # The volume keeps the settings that change during a game.
+    volumes:
+      - arena-data:/data
     # PORT sets the port of the server. The default is 27960.
     # Example: PORT=28000 docker compose up -d
     ports:
@@ -29,3 +32,6 @@ services:
       VOTES: "on"
       # Seconds without damage after a spawn. "0" sets it to off.
       SPAWN_PROTECT: "2"
+
+volumes:
+  arena-data:

@@ -128,6 +128,7 @@ The server stops the simulation when no human player is connected.
 | `--maps` | `MAPS` | yard,deck | Map rotation, a list with commas. The first map starts. After each match, the server goes to the next map. |
 | `--votes` | `VOTES` | on | `on`: players can vote to change the map and other settings. |
 | `--spawnprotect` | `SPAWN_PROTECT` | 2 | Seconds without damage after a spawn. The protection stops when the player fires. 0 sets it to off. |
+| `--config` | `CONFIG_FILE` | empty | File that keeps the settings that change during a game. The Docker image uses `/data/server.json`. |
 | `--rconpassword` | `RCON_PASSWORD` | empty | Password for the remote console, 8 characters or more. Empty sets it to off. |
 
 With `--botfill on`, `--bots 4` means: the server keeps a minimum of 4 players. Bots fill the free places.
@@ -148,12 +149,26 @@ Type these commands in the terminal of the server:
 | `nextmap` | Go to the next map of the rotation. |
 | `maps [id,id]` | Show or set the map rotation. |
 | `votes <on\|off>` | Let the players vote, or not. |
+| `resetconfig` | Remove the config file. The server uses its start options after the next start. |
 | `restart` | Start the match again. |
 | `kick <player id>` | Remove a human player. The `status` command shows the ids. |
 | `say <text>` | Send a message to all players. |
 | `quit` | Stop the server. |
 
 Set `SERVER_CONSOLE=1` to use the console when the input is not a terminal.
+
+### Saved settings
+
+With a config file, the server saves each setting that changes during a game: from the console, the remote console, or a vote.
+
+```sh
+npm run server -- --config ./server.json
+```
+
+- The saved settings are: the bots, the double jump, the match limits, the spawn protection, the map rotation, and the votes.
+- At the start, a saved setting is stronger than a start option or an environment variable.
+- The `resetconfig` command removes the file. Then the start options apply again after the next start.
+- The Docker image saves to `/data/server.json`. `compose.yaml` mounts a volume at `/data`. In Dokploy, add a volume for `/data`.
 
 ### Votes
 
@@ -210,7 +225,7 @@ Security:
   Behind a reverse proxy, all clients have the address of the proxy, and the block applies to all of them.
 - The server writes each remote command to its log. It does not write the password.
 - On a `ws://` connection, the password goes over the network without encryption. Use `wss://` (TLS) on the internet.
-- The changes are not permanent. After a restart, the server uses its start options again.
+- Without a config file, the changes are not permanent. See "Saved settings".
 
 ### Status endpoint
 
