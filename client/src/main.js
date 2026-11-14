@@ -434,6 +434,9 @@ function orbit(view, t) {
 }
 
 let lastFrame = performance.now(), acc = 0;
+// The zoom amount: 0 is the normal view, and 1 is the full zoom.
+let zoom = 0;
+
 function frame(now) {
   requestAnimationFrame(frame);
   const rawDt = now - lastFrame;
@@ -483,6 +486,10 @@ function frame(now) {
     // Slow camera flight behind the menu.
     orbit(view, now / 14000);
   }
+  // The zoom changes smoothly. A dead player and the menu have no zoom.
+  const zoomTarget = view.alive && input.zoomHeld() ? 1 : 0;
+  zoom += Math.sign(zoomTarget - zoom) * Math.min(Math.abs(zoomTarget - zoom), dt * 8);
+  input.zoomScale = renderer.setZoom(zoom);
   renderer.render(dt, view);
   perf.render(now);
   perf.frame(rawDt, { sim: t1 - t0, draw: performance.now() - t1, ticks, effects: renderer.effects.length, events: frameEvents.join(' ') });

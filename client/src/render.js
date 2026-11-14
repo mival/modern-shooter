@@ -22,6 +22,8 @@ export const QUALITY = {
   high: { pixels: 4.2e6, bloom: true },
   native: { pixels: Infinity, bloom: true },
 };
+// The horizontal field of view at the full zoom for a 4:3 screen, in degrees.
+const ZOOM_FOV = 40;
 const UP = new THREE.Vector3(0, 1, 0);
 const tr = newTrace();
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3();
@@ -164,7 +166,23 @@ export class Renderer {
   // "fov" is the horizontal field of view for a 4:3 screen, in degrees.
   setFov(fov) {
     this.fov = fov;
-    const h = 2 * Math.atan(Math.tan((fov * Math.PI) / 360) * 0.75);
+    this.applyFov();
+  }
+
+  // Sets the zoom. 0 is the normal view, and 1 is the full zoom.
+  // Returns the factor for the mouse speed, thus the aim moves at the same speed on the screen.
+  setZoom(amount) {
+    if (amount !== this.zoom) { this.zoom = amount; this.applyFov(); }
+    return Math.tan((this.viewFov() * Math.PI) / 360) / Math.tan((this.fov * Math.PI) / 360);
+  }
+
+  // Returns the field of view with the zoom, in degrees.
+  viewFov() {
+    return this.fov + (ZOOM_FOV - this.fov) * (this.zoom || 0);
+  }
+
+  applyFov() {
+    const h = 2 * Math.atan(Math.tan((this.viewFov() * Math.PI) / 360) * 0.75);
     this.camera.fov = (h * 180) / Math.PI;
     this.camera.updateProjectionMatrix();
   }

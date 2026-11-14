@@ -44,6 +44,7 @@ Open `http://localhost:27960` in a browser. Then select "Play offline" or "Conne
 | Mouse | Aim |
 | Left mouse button | Fire |
 | 1 to 7, mouse wheel | Select a weapon |
+| C, right mouse button | Zoom while you hold it |
 | Tab | Show the scores |
 | Enter | Chat |
 | Esc | Open the menu |

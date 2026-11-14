@@ -8,6 +8,10 @@ export class Input {
     this.yaw = 0; this.pitch = 0;
     this.sens = 1.5;
     this.fire = false;
+    // "zoomButton" is true while the player holds the right mouse button.
+    this.zoomButton = false;
+    // The zoom makes the mouse slower by this factor. 1 is the speed without the zoom.
+    this.zoomScale = 1;
     this.weaponRequest = -1;
     this.wheel = 0;
     this.typing = false;
@@ -23,23 +27,27 @@ export class Input {
       this.onKey(e.code);
     });
     document.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => { this.keys.clear(); this.fire = false; });
+    window.addEventListener('blur', () => { this.keys.clear(); this.fire = false; this.zoomButton = false; });
     document.addEventListener('mousemove', (e) => {
       if (!this.locked()) return;
       // Some browsers send one very large movement after the pointer lock starts. Ignore it.
       if (Math.abs(e.movementX) > 2000 || Math.abs(e.movementY) > 2000) return;
-      const k = this.sens * 0.001;
+      const k = this.sens * 0.001 * this.zoomScale;
       this.yaw -= e.movementX * k;
       this.pitch = Math.max(-1.55, Math.min(1.55, this.pitch - e.movementY * k));
     });
     canvas.addEventListener('mousedown', (e) => {
       if (!this.locked()) { this.lock(); return; }
       if (e.button === 0) this.fire = true;
+      if (e.button === 2) this.zoomButton = true;
     });
-    document.addEventListener('mouseup', (e) => { if (e.button === 0) this.fire = false; });
+    document.addEventListener('mouseup', (e) => {
+      if (e.button === 0) this.fire = false;
+      if (e.button === 2) this.zoomButton = false;
+    });
     canvas.addEventListener('wheel', (e) => { if (this.locked()) this.wheel += Math.sign(e.deltaY); }, { passive: true });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-    document.addEventListener('pointerlockchange', () => { if (!this.locked()) { this.fire = false; this.keys.clear(); } });
+    document.addEventListener('pointerlockchange', () => { if (!this.locked()) { this.fire = false; this.zoomButton = false; this.keys.clear(); } });
   }
 
   locked() { return document.pointerLockElement === this.canvas; }
@@ -58,6 +66,9 @@ export class Input {
   }
 
   down(code) { return this.keys.has(code); }
+
+  // Returns true while the player holds the zoom key (C) or the right mouse button.
+  zoomHeld() { return this.locked() && (this.zoomButton || this.down('KeyC')); }
 
   // Makes the input command for one tick.
   sample(seq) {
