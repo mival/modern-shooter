@@ -116,6 +116,7 @@ npm run server -- --port 27960 --bots 4 --fraglimit 20
 ```
 
 The server serves the web client and accepts WebSocket connections on the same port.
+The server compresses the files of the web client with Brotli or gzip. A reverse proxy does not have to compress them.
 The server stops the simulation when no human player is connected.
 
 | Option | Environment | Default | Description |

@@ -7,6 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+import zlib from 'node:zlib';
 import { WebSocketServer } from 'ws';
 import { GameHost } from '../shared/host.js';
 import { TICK_RATE, DEFAULT_PORT } from '../shared/constants.js';
@@ -120,6 +122,32 @@ const TYPES = {
   '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',
 };
 
+// The server compresses these file types. The other types (for example PNG) are compressed already.
+const COMPRESS = new Set(['.html', '.js', '.css', '.json', '.svg']);
+// A file smaller than this does not become much smaller.
+const COMPRESS_MIN = 1024;
+// The compressed files. The key has the file, its change time and the encoding. The value is a promise of the data.
+const compressed = new Map();
+
+// Returns the best encoding that the client accepts: "br", "gzip" or "".
+function pickEncoding(req) {
+  const accepted = String(req.headers['accept-encoding'] || '').toLowerCase().split(',').map((e) => e.trim());
+  const ok = (name) => accepted.some((e) => e === name || (e.startsWith(name + ';') && !/;\s*q=0(\.0*)?$/.test(e)));
+  return ok('br') ? 'br' : ok('gzip') ? 'gzip' : '';
+}
+
+// Compresses a file one time and keeps the result in memory.
+function compress(key, data, encoding) {
+  if (!compressed.has(key)) {
+    const run = encoding === 'br'
+      ? promisify(zlib.brotliCompress)(data, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.length } })
+      : promisify(zlib.gzip)(data, { level: 9 });
+    compressed.set(key, run);
+    run.catch(() => compressed.delete(key));
+  }
+  return compressed.get(key);
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/status') {
@@ -134,17 +162,30 @@ const server = http.createServer((req, res) => {
   const file = path.join(DIST, rel);
   // Do not serve files outside the client directory.
   if (!file.startsWith(DIST + path.sep)) { res.writeHead(403).end(); return; }
-  fs.readFile(file, (err, data) => {
+  fs.readFile(file, async (err, data) => {
     if (err) {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       res.end(fs.existsSync(DIST) ? 'Not found.' : 'The web client is not built. Run "npm run build".');
       return;
     }
-    res.writeHead(200, {
+    const headers = {
       'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream',
       'Cache-Control': rel.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
       'X-Content-Type-Options': 'nosniff',
-    });
+    };
+    if (COMPRESS.has(path.extname(file)) && data.length >= COMPRESS_MIN) {
+      headers.Vary = 'Accept-Encoding';
+      const encoding = pickEncoding(req);
+      if (encoding) {
+        try {
+          const mtime = fs.statSync(file).mtimeMs;
+          data = await compress(`${file}|${mtime}|${encoding}`, data, encoding);
+          headers['Content-Encoding'] = encoding;
+        } catch { /* Send the file without compression. */ }
+      }
+    }
+    headers['Content-Length'] = data.length;
+    res.writeHead(200, headers);
     res.end(req.method === 'HEAD' ? undefined : data);
   });
 });
