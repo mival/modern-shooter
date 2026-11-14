@@ -77,6 +77,8 @@ let matchState = 'play', timeLeft = -1, fragLimit = 0;
 let rtt = 0, lastPing = 0, fps = 0, frames = 0, fpsAt = 0;
 // The open vote on the server, or null.
 let vote = null;
+// "protFired" is true after the local player fires during the spawn protection.
+let protFired = false;
 let stepSmooth = 0, hitUntil = 0, flash = 0, centerUntil = 0, pickupUntil = 0;
 const info = new Map();
 const local = newMoveState();
@@ -338,8 +340,13 @@ function updateHud(now) {
     const text = `Vote: ${vote.text}\nyes ${vote.yes} · no ${vote.no} · ${Math.max(0, Math.ceil((vote.end - now) / 1000))} s\nF1: yes   F2: no`;
     if ($('vote').textContent !== text) $('vote').textContent = text;
   }
-  $('amp').hidden = !(me.amp > 0 || me.prot);
-  if (me.amp > 0 || me.prot) $('amp').textContent = [me.amp > 0 ? `Amplifier ${me.amp}` : '', me.prot ? 'Spawn protection' : ''].filter(Boolean).join(' · ');
+  // The protection stops when the player fires. The client hides it at once and does not wait for the server.
+  if (!me.prot) protFired = false;
+  else if (input.fire || input.down('ControlLeft')) protFired = true;
+  const prot = me.prot && !protFired;
+  $('shield').classList.toggle('on', prot);
+  $('amp').hidden = !(me.amp > 0 || prot);
+  if (me.amp > 0 || prot) $('amp').textContent = [me.amp > 0 ? `Amplifier ${me.amp}` : '', prot ? 'Spawn protection: fire to stop it' : ''].filter(Boolean).join(' · ');
   const t = Math.max(0, timeLeft);
   $('clock').textContent = timeLeft < 0 ? '∞' : `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
   $('scores').hidden = !(input.down('Tab') || matchState === 'intermission');

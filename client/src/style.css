@@ -24,6 +24,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #05060c; col
   filter: drop-shadow(0 0 2px #000); }
 #crosshair.hit { filter: drop-shadow(0 0 2px #000) hue-rotate(200deg) brightness(1.6); transform: scale(1.35); }
 #flash { position: absolute; inset: 0; background: radial-gradient(transparent 45%, rgba(255, 40, 20, 0.75)); opacity: 0; }
+/* The screen tint of the spawn protection. */
+#shield { position: absolute; inset: 0; opacity: 0; transition: opacity 0.12s; background: rgba(70, 215, 255, 0.1);
+  box-shadow: inset 0 0 0 3px rgba(120, 230, 255, 0.8), inset 0 0 170px rgba(70, 215, 255, 0.6); }
+#shield.on { opacity: 1; animation: shield 0.7s ease-in-out infinite alternate; }
+@keyframes shield { from { opacity: 1; } to { opacity: 0.6; } }
 #top { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 18px; align-items: baseline;
   padding: 6px 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; }
 #clock { font-size: 24px; font-weight: 700; }

@@ -117,7 +117,7 @@ export class Renderer {
     this.skullMat = new THREE.MeshStandardMaterial({ color: 0x20242e, roughness: 0.6, metalness: 0.4 });
     this.visorMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     this.auraMat = new THREE.MeshBasicMaterial({ color: 0xe04aff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false });
-    this.shieldMat = new THREE.MeshBasicMaterial({ color: 0xdff4ff, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false });
+    this.shieldMat = new THREE.MeshBasicMaterial({ color: 0x6fe2ff, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
     this.arcCoreMat = new THREE.MeshBasicMaterial({ color: 0xf2fbff });
     this.arcGlowMat = new THREE.MeshBasicMaterial({ color: WEAPONS[W_ARC].color, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     this.projectileMats = WEAPONS.map((w, i) => new THREE.MeshBasicMaterial({ color: i === W_RL ? 0xffb060 : w.color }));
@@ -415,9 +415,10 @@ export class Renderer {
       o.group.position.set(p.x, p.y, p.z);
       o.group.rotation.y = p.yaw;
       o.head.rotation.x = p.pitch;
-      // The aura shows the Amplifier (violet) or the spawn protection (white).
+      // The aura shows the Amplifier (violet) or the spawn protection (cyan, with a pulse).
       o.aura.visible = p.amp || !!p.shield;
       o.aura.material = p.amp ? this.auraMat : this.shieldMat;
+      this.shieldMat.opacity = 0.4 + 0.15 * Math.sin(performance.now() / 110);
       o.beam.visible = p.beam && !p.dead;
       if (o.beam.visible) this.updateBeam(o.beam, p, mine);
     }
