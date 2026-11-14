@@ -31,6 +31,8 @@ export class Game {
     this.map = map;
     this.world = makeWorld(map);
     this.world.doubleJump = !!opts.doubleJump;
+    // The instakill mode: each player has only the Hammer and the Railgun. A Railgun hit kills at once.
+    this.instakill = !!opts.instakill;
     this.fragLimit = opts.fragLimit ?? 20;
     this.timeLimit = (opts.timeLimit ?? 10) * 60;
     this.spawnProtect = opts.spawnProtect ?? SPAWN_PROTECT;
@@ -53,8 +55,9 @@ export class Game {
 
   resetItems() {
     for (const it of this.items) {
-      it.avail = !it.def.firstSpawn;
-      it.respawnAt = this.time + (it.def.firstSpawn || 0);
+      // The instakill mode has no items.
+      it.avail = !it.def.firstSpawn && !this.instakill;
+      it.respawnAt = this.instakill ? Infinity : this.time + (it.def.firstSpawn || 0);
     }
   }
 
@@ -99,6 +102,10 @@ export class Game {
     p.weapons = (1 << W_HAMMER) | (1 << W_MG); p.weapon = p.wantWeapon = W_MG;
     p.ammo = WEAPONS.map(() => 0);
     p.ammo[W_MG] = SPAWN_AMMO;
+    if (this.instakill) {
+      p.weapons = (1 << W_HAMMER) | (1 << W_RAIL); p.weapon = p.wantWeapon = W_RAIL;
+      p.ammo[W_MG] = 0; p.ammo[W_RAIL] = AMMO_MAX;
+    }
     p.weaponTime = 0; p.beam = false; p.amp = 0;
     p.dead = false;
     p.protectUntil = this.time + this.spawnProtect;
@@ -158,7 +165,8 @@ export class Game {
         p.weapon = p.wantWeapon;
         p.weaponTime = 0.3;
       } else if (fire && this.hasAmmo(p, p.weapon)) {
-        if (WEAPONS[p.weapon].kind !== 'melee') p.ammo[p.weapon]--;
+        // The Railgun uses no ammo in the instakill mode.
+        if (WEAPONS[p.weapon].kind !== 'melee' && !(this.instakill && p.weapon === W_RAIL)) p.ammo[p.weapon]--;
         p.weaponTime += WEAPONS[p.weapon].reload;
         this.fire(p);
       } else {
@@ -281,6 +289,16 @@ export class Game {
   damage(target, attacker, amount, dx, dy, dz, weapon) {
     if (target.dead || this.state !== 'play') return;
     if (attacker !== target && this.time < target.protectUntil) return;
+    if (this.instakill && weapon === W_RAIL && attacker && attacker !== target) {
+      // A Railgun hit kills at once. The armor and the bot skill do not decrease the damage.
+      const push = 200 * KNOCKBACK;
+      target.vx += dx * push; target.vy += dy * push; target.vz += dz * push;
+      this.events.push({ t: 'pain', id: target.id, a: attacker.id, d: target.health });
+      target.lastHurtBy = attacker.id; target.lastHurtAt = this.time;
+      target.health = 0;
+      this.kill(target, attacker, weapon);
+      return;
+    }
     if (attacker && attacker.amp > 0) amount *= AMP_FACTOR;
     const k = Math.min(amount, 200) * KNOCKBACK;
     target.vx += dx * k; target.vy += dy * k; target.vz += dz * k;

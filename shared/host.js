@@ -186,6 +186,13 @@ export class GameHost {
     this.broadcast({ t: 'cfg', doubleJump: this.game.world.doubleJump });
   }
 
+  // Sets the instakill mode. The match starts again, because the weapons and the items change.
+  setInstakill(on) {
+    this.game.instakill = !!on;
+    this.game.restart();
+    this.print(`Instakill mode is ${this.game.instakill ? 'on' : 'off'}`);
+  }
+
   // The time of the host in seconds. It does not start again after a map change.
   now() {
     return this.ticks / TICK_RATE;
@@ -204,9 +211,10 @@ export class GameHost {
       return { label: `set ${n} bots${skill ? ' with skill ' + skill : ''}`, run: () => this.applySettings({ bots: n, botSkill: skill, botFill: false }) };
     }
     if (name === 'doublejump' && onOff) return { label: `set the double jump to ${a}`, run: () => this.applySettings({ doubleJump: a === 'on' }) };
+    if (name === 'instakill' && onOff) return { label: `set the instakill mode to ${a}`, run: () => this.applySettings({ instakill: a === 'on' }) };
     if (name === 'fraglimit' && int(0, 1000)) return { label: `set the frag limit to ${n}`, run: () => this.applySettings({ fragLimit: n }) };
     if (name === 'timelimit' && int(0, 600)) return { label: `set the time limit to ${n} minutes`, run: () => this.applySettings({ timeLimit: n }) };
-    return `Votes: restart, nextmap, map <${Object.keys(MAPS).join('|')}>, bots <0-${MAX_BOTS}> [skill 1-5], doublejump <on|off>, fraglimit <n>, timelimit <minutes>`;
+    return `Votes: restart, nextmap, map <${Object.keys(MAPS).join('|')}>, bots <0-${MAX_BOTS}> [skill 1-5], doublejump <on|off>, instakill <on|off>, fraglimit <n>, timelimit <minutes>`;
   }
 
   callVote(c, text) {
@@ -252,7 +260,7 @@ export class GameHost {
     this.mapId = id;
     this.game = new Game(buildMap(id), {
       fragLimit: old.fragLimit, timeLimit: old.timeLimit / 60, spawnProtect: old.spawnProtect,
-      doubleJump: old.world.doubleJump, seed: this.seed === undefined ? undefined : this.seed + this.ticks,
+      doubleJump: old.world.doubleJump, instakill: old.instakill, seed: this.seed === undefined ? undefined : this.seed + this.ticks,
     });
     // The navigation graph and the bots belong to the old map.
     this.nav = null;
@@ -281,7 +289,7 @@ export class GameHost {
     const g = this.game;
     return {
       bots: this.botCount, botSkill: this.botSkill, botFill: this.botFill,
-      doubleJump: g.world.doubleJump, fragLimit: g.fragLimit, timeLimit: g.timeLimit / 60,
+      doubleJump: g.world.doubleJump, instakill: g.instakill, fragLimit: g.fragLimit, timeLimit: g.timeLimit / 60,
       spawnProtect: g.spawnProtect, maps: this.rotation.slice(), votes: this.votesOn,
     };
   }
@@ -296,6 +304,7 @@ export class GameHost {
     const fill = typeof v.botFill === 'boolean' ? v.botFill : this.botFill;
     if (bots !== this.botCount || skill !== undefined || fill !== this.botFill) this.setBots(bots, skill, fill);
     if (typeof v.doubleJump === 'boolean' && v.doubleJump !== g.world.doubleJump) this.setDoubleJump(v.doubleJump);
+    if (typeof v.instakill === 'boolean' && v.instakill !== g.instakill) this.setInstakill(v.instakill);
     if (int(v.fragLimit, 0, 1000) && v.fragLimit !== g.fragLimit) {
       g.fragLimit = v.fragLimit;
       this.broadcast({ t: 'cfg', fragLimit: g.fragLimit });
@@ -369,7 +378,7 @@ export class GameHost {
     return {
       game: GAME_ID, name: this.name, map: this.game.map.name, mapId: this.mapId,
       players: this.humanCount(), maxClients: this.maxClients, bots: this.bots.size,
-      doubleJump: this.game.world.doubleJump,
+      doubleJump: this.game.world.doubleJump, instakill: this.game.instakill,
     };
   }
 }

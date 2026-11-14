@@ -343,3 +343,30 @@ test('the binary format keeps all values of a snapshot and of the input commands
   assert.ok(closed);
   assert.equal(old[0].t, 'error');
 });
+
+test('the instakill mode gives only the Railgun, and one hit kills', () => {
+  const g = new Game(buildMap(), { seed: 1, spawnProtect: 0, instakill: true });
+  const a = g.addPlayer(1, 'a'), b = g.addPlayer(2, 'b');
+  assert.equal(a.weapon, W_RAIL);
+  assert.equal(a.weapons, (1 << W_HAMMER) | (1 << W_RAIL));
+  assert.ok(g.items.every((it) => !it.avail));
+  a.x = 0; a.y = 24; a.z = 600; b.x = 0; b.y = 24; b.z = 300;
+  a.vx = a.vy = a.vz = b.vx = b.vy = b.vz = 0; b.health = 200; b.armor = 200; a.weaponTime = 0;
+  const ammo = a.ammo[W_RAIL];
+  g.runCmd(a, cmd({ buttons: BTN_FIRE })); g.tick();
+  assert.ok(b.dead);
+  assert.equal(a.frags, 1);
+  assert.equal(a.ammo[W_RAIL], ammo);
+  // The items do not come back.
+  for (let i = 0; i < 600; i++) g.tick();
+  assert.ok(g.items.every((it) => !it.avail));
+});
+
+test('a vote-style setting change starts and stops the instakill mode', () => {
+  const host = new GameHost({ bots: 0, seed: 1 });
+  assert.equal(host.getSettings().instakill, false);
+  assert.ok(host.applySettings({ instakill: true }));
+  assert.ok(host.game.items.every((it) => !it.avail));
+  assert.ok(host.applySettings({ instakill: false }));
+  assert.ok(host.game.items.some((it) => it.avail));
+});

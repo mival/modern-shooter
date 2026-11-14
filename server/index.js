@@ -22,6 +22,7 @@ const OPTIONS = {
   botskill: { env: 'BOT_SKILL', def: 3, help: 'Bot skill from 1 to 5' },
   botfill: { env: 'BOT_FILL', def: 'on', help: 'on: a bot leaves when a player joins. off: the bot count is constant' },
   doublejump: { env: 'DOUBLE_JUMP', def: 'off', help: 'on: a player can jump one more time in the air' },
+  instakill: { env: 'INSTAKILL', def: 'off', help: 'on: each player has only the Hammer and the Railgun, and a Railgun hit kills at once' },
   fraglimit: { env: 'FRAG_LIMIT', def: 20, help: 'Frags that end a match. 0 sets no limit' },
   timelimit: { env: 'TIME_LIMIT', def: 10, help: 'Match time in minutes. 0 sets no limit' },
   maps: { env: 'MAPS', def: MAP_IDS.join(','), help: `Map rotation, a list with commas. The first map starts. Maps: ${MAP_IDS.join(', ')}` },
@@ -70,6 +71,7 @@ function readOptions() {
     maxClients: num('maxclients', 1, 32), bots: num('bots', 0, 15), botSkill: num('botskill', 1, 5),
     botFill: !/^(off|0|false|no)$/i.test(String(o.botfill)),
     doubleJump: /^(on|1|true|yes)$/i.test(String(o.doublejump)),
+    instakill: /^(on|1|true|yes)$/i.test(String(o.instakill)),
     votes: !/^(off|0|false|no)$/i.test(String(o.votes)),
     fragLimit: num('fraglimit', 0, 1000), timeLimit: num('timelimit', 0, 600), spawnProtect: num('spawnprotect', 0, 10),
   };
@@ -224,13 +226,13 @@ setInterval(() => {
 // ---------- Commands ----------
 // The local console and the remote console (rcon) use the same commands.
 // "out" is a function that writes one line of the answer.
-const HELP = 'status | bots <count> [skill 1-5] | botfill <on|off> | doublejump <on|off> | fraglimit <n> | timelimit <minutes> | spawnprotect <seconds> | map <id> | nextmap | maps [id,id] | votes <on|off> | resetconfig | restart | kick <player id> | say <text> | quit';
+const HELP = 'status | bots <count> [skill 1-5] | botfill <on|off> | doublejump <on|off> | instakill <on|off> | fraglimit <n> | timelimit <minutes> | spawnprotect <seconds> | map <id> | nextmap | maps [id,id] | votes <on|off> | resetconfig | restart | kick <player id> | say <text> | quit';
 const COMMANDS = {
   help(out) { out(HELP); },
   status(out) {
     const s = game.status();
     out(`This minute: ${tickLine()}`);
-    out(`${s.name} | map ${s.map} (${s.mapId}), rotation ${game.rotation.join(',')} | players ${s.players}/${s.maxClients} | bots ${s.bots} (${game.botFill ? `fill on: ${game.botCount} players in total` : 'fill off'}, skill ${game.botSkill}) | double jump ${s.doubleJump ? 'on' : 'off'} | frag limit ${game.game.fragLimit} | time limit ${game.game.timeLimit / 60} min | spawn protection ${game.game.spawnProtect} s`);
+    out(`${s.name} | map ${s.map} (${s.mapId}), rotation ${game.rotation.join(',')} | players ${s.players}/${s.maxClients} | bots ${s.bots} (${game.botFill ? `fill on: ${game.botCount} players in total` : 'fill off'}, skill ${game.botSkill}) | double jump ${s.doubleJump ? 'on' : 'off'} | instakill ${s.instakill ? 'on' : 'off'} | frag limit ${game.game.fragLimit} | time limit ${game.game.timeLimit / 60} min | spawn protection ${game.game.spawnProtect} s`);
     for (const p of game.game.scores()) out(`  ${String(p.id).padStart(3)} ${p.name.padEnd(16)} ${p.bot ? 'bot  ' : 'human'} frags ${p.frags} deaths ${p.deaths}`);
   },
   bots(out, count, skill) {
@@ -250,6 +252,10 @@ const COMMANDS = {
   doublejump(out, v) {
     if (v === 'on' || v === 'off') game.applySettings({ doubleJump: v === 'on' });
     out(`Double jump: ${game.game.world.doubleJump ? 'on' : 'off'}`);
+  },
+  instakill(out, v) {
+    if (v === 'on' || v === 'off') game.applySettings({ instakill: v === 'on' });
+    out(`Instakill mode: ${game.game.instakill ? 'on' : 'off'}`);
   },
   fraglimit(out, v) {
     const n = Number(v);
@@ -356,5 +362,5 @@ process.on('SIGTERM', shutdown);
 
 server.listen(opts.port, opts.host, () => {
   log(`${opts.name}: listening on http://${opts.host}:${opts.port}`);
-  log(`Bots ${opts.bots} (skill ${opts.botSkill}, fill ${opts.botFill ? 'on' : 'off'}), frag limit ${opts.fragLimit}, time limit ${opts.timeLimit} min, max clients ${opts.maxClients}, maps ${opts.maps.join(',')}, double jump ${opts.doubleJump ? 'on' : 'off'}, remote console ${opts.rconPassword ? 'on' : 'off'}, config file ${opts.configFile || 'none'}`);
+  log(`Bots ${opts.bots} (skill ${opts.botSkill}, fill ${opts.botFill ? 'on' : 'off'}), frag limit ${opts.fragLimit}, time limit ${opts.timeLimit} min, max clients ${opts.maxClients}, maps ${opts.maps.join(',')}, double jump ${opts.doubleJump ? 'on' : 'off'}, instakill ${opts.instakill ? 'on' : 'off'}, remote console ${opts.rconPassword ? 'on' : 'off'}, config file ${opts.configFile || 'none'}`);
 });

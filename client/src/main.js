@@ -20,7 +20,7 @@ const renderer = new Renderer(canvas, map, world);
 const input = new Input(canvas);
 
 // ---------- Settings ----------
-const settings = { name: 'Player', botsOn: true, botCount: 4, botSkill: 3, fragLimit: 20, timeLimit: 10, address: '', sens: 1.5, fov: 100, volume: 0.5, quality: 'medium', doubleJump: false, perf: false, map: 'all' };
+const settings = { name: 'Player', botsOn: true, botCount: 4, botSkill: 3, fragLimit: 20, timeLimit: 10, address: '', sens: 1.5, fov: 100, volume: 0.5, quality: 'medium', doubleJump: false, instakill: false, perf: false, map: 'all' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('slipstream') || '{}')); } catch { /* Storage is not available. */ }
 function saveSettings() {
   try { localStorage.setItem('slipstream', JSON.stringify(settings)); } catch { /* Storage is not available. */ }
@@ -55,6 +55,8 @@ function bindSettings() {
   $('quality').addEventListener('change', () => { settings.quality = $('quality').value; saveSettings(); apply(); });
   $('doublejump').checked = settings.doubleJump;
   $('doublejump').addEventListener('change', () => { settings.doubleJump = $('doublejump').checked; saveSettings(); });
+  $('instakill').checked = settings.instakill;
+  $('instakill').addEventListener('change', () => { settings.instakill = $('instakill').checked; saveSettings(); });
   $('map').replaceChildren(new Option('All maps, in rotation', 'all'), ...MAP_IDS.map((id) => new Option(MAPS[id]().name, id)));
   $('map').value = Object.hasOwn(MAPS, settings.map) ? settings.map : 'all';
   $('map').addEventListener('change', () => { settings.map = $('map').value; saveSettings(); });
@@ -120,7 +122,7 @@ function hideMenu() {
 function offlineOptions() {
   return {
     bots: settings.botsOn ? settings.botCount : 0, botSkill: settings.botSkill, botFill: false,
-    fragLimit: settings.fragLimit, timeLimit: settings.timeLimit, doubleJump: settings.doubleJump,
+    fragLimit: settings.fragLimit, timeLimit: settings.timeLimit, doubleJump: settings.doubleJump, instakill: settings.instakill,
     // "all" plays all maps, one after the other.
     maps: Object.hasOwn(MAPS, settings.map) ? [settings.map] : MAP_IDS,
   };

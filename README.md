@@ -74,6 +74,7 @@ The menu has the bot setup for the offline mode:
 - "Bot skill" sets the skill (1 to 5). A higher skill reacts faster, aims better, and does more damage.
   Skill 5 does the full weapon damage. Skill 1 does 40% of it.
 - "Double jump" lets each player jump one more time in the air.
+- "Instakill" gives each player only the Hammer and the Railgun. A Railgun hit kills at once. The map has no items.
 
 During an offline game, press Esc, change the setup, and select "Apply bot setup".
 
@@ -126,6 +127,7 @@ The server stops the simulation when no human player is connected.
 | `--botskill` | `BOT_SKILL` | 3 | Bot skill (1 to 5). |
 | `--botfill` | `BOT_FILL` | on | `on`: a bot leaves when a player joins. `off`: the bot count is constant. |
 | `--doublejump` | `DOUBLE_JUMP` | off | `on`: a player can jump one more time in the air. The server sends this setting to the clients. |
+| `--instakill` | `INSTAKILL` | off | `on`: each player has only the Hammer and the Railgun. A Railgun hit kills at once. The Railgun uses no ammo, and the map has no items. |
 | `--fraglimit` | `FRAG_LIMIT` | 20 | Frags that end a match. 0 sets no limit. |
 | `--timelimit` | `TIME_LIMIT` | 10 | Match time in minutes. 0 sets no limit. |
 | `--maps` | `MAPS` | all maps | Map rotation, a list with commas. The first map starts. After each match, the server goes to the next map. |
@@ -146,6 +148,7 @@ Type these commands in the terminal of the server:
 | `bots <count> [skill]` | Set the exact number of bots. Real players do not change it. This command sets the bot fill to off. `bots 0` removes all bots. |
 | `botfill <on\|off>` | `on`: the bot count becomes the total number of players, and a bot leaves when a player joins. `off`: the number of bots is constant. |
 | `doublejump <on\|off>` | Set the double jump. The change applies immediately. |
+| `instakill <on\|off>` | Set the instakill mode. The match starts again. |
 | `fraglimit <n>`, `timelimit <minutes>` | Change the match limits. |
 | `spawnprotect <seconds>` | Set the time without damage after a spawn (0 to 10). |
 | `map <id>` | Start a new match on a map immediately. |
@@ -168,7 +171,7 @@ With a config file, the server saves each setting that changes during a game: fr
 npm run server -- --config ./server.json
 ```
 
-- The saved settings are: the bots, the double jump, the match limits, the spawn protection, the map rotation, and the votes.
+- The saved settings are: the bots, the double jump, the instakill mode, the match limits, the spawn protection, the map rotation, and the votes.
 - At the start, a saved setting is stronger than a start option or an environment variable.
 - The `resetconfig` command removes the file. Then the start options apply again after the next start.
 - The Docker image saves to `/data/server.json`. `compose.yaml` mounts a volume at `/data`. In Dokploy, add a volume for `/data`.
@@ -189,6 +192,7 @@ A player can ask for a change without the remote console password. In the game, 
 | `nextmap`, `map <id>` | Change the map. |
 | `bots <count> [skill]` | Set the number of bots. |
 | `doublejump <on\|off>` | Set the double jump. |
+| `instakill <on\|off>` | Set the instakill mode. The match starts again. |
 | `fraglimit <n>`, `timelimit <minutes>` | Change the match limits. |
 
 - The other players answer with `/yes` or `/no`, or with the keys F1 and F2.
