@@ -42,7 +42,7 @@ export const WEAPONS = [
   { id: 'mg', name: 'Machine Gun', kind: 'bullet', damage: 7, reload: 0.1, spread: 0.025, pellets: 1, ammoGive: 50, ammoBox: 50, color: 0xffd24a },
   { id: 'sg', name: 'Shotgun', kind: 'bullet', damage: 10, reload: 1.0, spread: 0.085, pellets: 11, ammoGive: 10, ammoBox: 10, color: 0xff8a3c },
   { id: 'rl', name: 'Rocket Launcher', kind: 'projectile', damage: 100, splash: 100, radius: 120, speed: 900, reload: 0.8, ammoGive: 10, ammoBox: 5, color: 0xff4444 },
-  { id: 'arc', name: 'Arc Gun', kind: 'beam', damage: 8, reload: 0.05, range: 768, ammoGive: 100, ammoBox: 60, color: 0x9ad8ff },
+  { id: 'arc', name: 'Arc Gun', kind: 'beam', damage: 8, reload: 0.05, range: 768, ammoGive: 100, ammoBox: 60, color: 0x19d3ff },
   { id: 'rail', name: 'Railgun', kind: 'rail', damage: 100, reload: 1.5, ammoGive: 10, ammoBox: 10, color: 0x4dff88 },
   { id: 'pg', name: 'Plasma Rifle', kind: 'projectile', damage: 20, splash: 15, radius: 20, speed: 2000, reload: 0.1, ammoGive: 50, ammoBox: 30, color: 0x7a8cff },
 ];
