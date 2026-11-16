@@ -51,3 +51,21 @@ The tool does these steps:
 - The model data adds approximately 470 kB to the client script (125 kB with gzip).
 - The client needs no loader and no more requests. The data is a part of the script.
 - A change of a model needs SolidCraft for the export. The build of the game does not need SolidCraft.
+
+## Items
+
+The pickup items are also models from SolidCraft. The designs are in `assets/items`.
+The function `buildModel` in `client/src/weapons.js` makes a model from the data of an item.
+The renderer gives each item its glow colour and its scale, thus one model is sufficient for all sizes of an item.
+
+![The item models](screenshots/cad-items.png)
+![The armor items on the map](screenshots/cad-armor.png)
+
+| Item | Design | Triangles from SolidCraft | Target | Triangles in the game | Data size |
+|---|---|---|---|---|---|
+| Health (four sizes) | `health.sc` | 4,604 | 400 | 480 | 20 kB |
+| Armor (three sizes) | `armor.sc` | 180 | 3000 | 180 | 5 kB |
+| Ammo box (one for each weapon) | `ammo.sc` | 2,632 | 500 | 518 | 18 kB |
+| Amplifier | `amplifier.sc` | 87,302 | 1200 | 1,198 | 60 kB |
+
+The armor model has flat faces only, thus the tool does not decrease its triangles.

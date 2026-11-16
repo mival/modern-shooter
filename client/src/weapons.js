@@ -42,12 +42,18 @@ function modelGeometries(data) {
   return geometries.get(data);
 }
 
+// Returns a model from the model data. "glow" is the material for the glow parts.
+export function buildModel(data, glow) {
+  const g = new THREE.Group();
+  const materials = { metal, dark, glow };
+  for (const [material, geometry] of modelGeometries(data)) g.add(new THREE.Mesh(geometry, materials[material]));
+  return g;
+}
+
 // Returns the model of a weapon. "userData.muzzle" is the Z position of the muzzle.
 export function buildWeaponModel(index) {
-  const g = new THREE.Group();
   const model = MODELS[index];
-  const materials = { metal, dark, glow: glows[index] };
-  for (const [material, geometry] of modelGeometries(model.data)) g.add(new THREE.Mesh(geometry, materials[material]));
+  const g = buildModel(model.data, glows[index]);
   g.userData.muzzle = model.muzzle;
   return g;
 }

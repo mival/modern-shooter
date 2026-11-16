@@ -6,7 +6,11 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { WEAPONS, ITEMS, PM, W_HAMMER, W_RL, W_ARC, W_RAIL } from '../../shared/constants.js';
-import { buildWeaponModel } from './weapons.js';
+import { buildWeaponModel, buildModel } from './weapons.js';
+import armorModel from './models/armor.js';
+import healthModel from './models/health.js';
+import ammoModel from './models/ammo.js';
+import amplifierModel from './models/amplifier.js';
 import { traceBox, newTrace } from '../../shared/collision.js';
 
 const SURFACE = {
@@ -285,22 +289,18 @@ export class Renderer {
 
   buildItems() {
     const glow = (color, k = 1) => new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.7 * k, roughness: 0.4 });
-    const cross = (s, mat) => {
-      const g = new THREE.Group();
-      g.add(new THREE.Mesh(new THREE.BoxGeometry(s, s / 3, s / 3), mat), new THREE.Mesh(new THREE.BoxGeometry(s / 3, s, s / 3), mat));
-      return g;
-    };
     this.items = this.map.items.map((it) => {
       const d = ITEMS[it.type];
       let m;
       if (d.kind === 'health') {
-        m = cross(d.amount >= 100 ? 30 : d.amount >= 50 ? 22 : d.amount >= 25 ? 18 : 10,
-          glow(d.amount >= 100 ? 0x4aa8ff : d.amount >= 50 ? 0xffc04a : d.amount >= 25 ? 0xffe14a : 0x5dff7a));
+        // The items are models from the CAD program. The health model is 30 units wide.
+        m = buildModel(healthModel, glow(d.amount >= 100 ? 0x4aa8ff : d.amount >= 50 ? 0xffc04a : d.amount >= 25 ? 0xffe14a : 0x5dff7a));
+        m.scale.setScalar((d.amount >= 100 ? 30 : d.amount >= 50 ? 22 : d.amount >= 25 ? 18 : 10) / 30);
       } else if (d.kind === 'armor') {
         const c = d.amount >= 100 ? 0xff4a3c : d.amount >= 50 ? 0xffd23c : 0x6fe08a;
-        const s = d.amount >= 50 ? 15 : 6;
-        m = new THREE.Mesh(new THREE.OctahedronGeometry(s), glow(c));
-        m.scale.y = 1.25;
+        // The small armor uses the same model at a smaller scale.
+        m = buildModel(armorModel, glow(c));
+        m.scale.setScalar(d.amount >= 50 ? 1.2 : 0.5);
       } else if (d.kind === 'weapon') {
         m = new THREE.Group();
         const gun = buildWeaponModel(d.weapon);
@@ -311,9 +311,9 @@ export class Renderer {
         ring.rotation.x = Math.PI / 2; ring.position.y = -20;
         m.add(gun, ring);
       } else if (d.kind === 'ammo') {
-        m = new THREE.Mesh(new THREE.BoxGeometry(12, 9, 12), glow(WEAPONS[d.weapon].color, 0.6));
+        m = buildModel(ammoModel, glow(WEAPONS[d.weapon].color, 0.6));
       } else {
-        m = new THREE.Mesh(new THREE.IcosahedronGeometry(17, 0), glow(0xe04aff, 2));
+        m = buildModel(amplifierModel, glow(0xe04aff, 2));
       }
       m.position.set(it.pos[0], it.pos[1], it.pos[2]);
       m.userData.y = it.pos[1] - (d.kind === 'weapon' || d.kind === 'amp' ? 0 : 8);
