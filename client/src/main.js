@@ -20,7 +20,7 @@ const renderer = new Renderer(canvas, map, world);
 const input = new Input(canvas);
 
 // ---------- Settings ----------
-const settings = { name: 'Player', botsOn: true, botCount: 4, botSkill: 3, fragLimit: 20, timeLimit: 10, address: '', sens: 1.5, fov: 100, volume: 0.5, quality: 'medium', doubleJump: false, instakill: false, perf: false, map: 'all' };
+const settings = { name: 'Player', botsOn: true, botCount: 4, botSkill: 3, fragLimit: 20, timeLimit: 10, address: '', sens: 1.5, fov: 100, volume: 0.5, quality: 'medium', renderScale: 1, doubleJump: false, instakill: false, perf: false, map: 'all' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('slipstream') || '{}')); } catch { /* Storage is not available. */ }
 function saveSettings() {
   try { localStorage.setItem('slipstream', JSON.stringify(settings)); } catch { /* Storage is not available. */ }
@@ -52,7 +52,8 @@ function bindSettings() {
     $(id).addEventListener('input', () => { settings[key] = num($(id).value, lo, hi, settings[key]); saveSettings(); apply(); });
   }
   $('quality').value = settings.quality;
-  $('quality').addEventListener('change', () => { settings.quality = $('quality').value; saveSettings(); apply(); });
+  // A different quality level starts at the full render scale.
+  $('quality').addEventListener('change', () => { settings.quality = $('quality').value; apply(); settings.renderScale = renderer.scale; saveSettings(); });
   $('doublejump').checked = settings.doubleJump;
   $('doublejump').addEventListener('change', () => { settings.doubleJump = $('doublejump').checked; saveSettings(); });
   $('instakill').checked = settings.instakill;
@@ -65,6 +66,8 @@ function bindSettings() {
   $('botson').checked = settings.botsOn;
   $('botson').addEventListener('change', () => { settings.botsOn = $('botson').checked; saveSettings(); apply(); });
   apply();
+  // Use the render scale from the last game, thus the first fight has no slow frames.
+  if (!params.get('quality')) renderer.setScale(settings.renderScale);
 }
 
 const perf = new Perf($('perfgraph'), $('perftext'));
@@ -497,9 +500,15 @@ function frame(now) {
   const zoomTarget = view.alive && input.zoomHeld() ? 1 : 0;
   zoom += Math.sign(zoomTarget - zoom) * Math.min(Math.abs(zoomTarget - zoom), dt * 8);
   input.zoomScale = renderer.setZoom(zoom);
+  // The renderer decreases the render resolution when many frames are slow during a game.
+  // The frames with the open menu do not count, because the menu has its own cost.
+  if (view.alive && $('menu').hidden && renderer.adaptScale(rawDt)) {
+    settings.renderScale = renderer.scale; saveSettings();
+    addChat(null, `The game decreased the render resolution to ${Math.round(renderer.scale * 100)} % to keep the frame rate`);
+  }
   renderer.render(dt, view);
   perf.render(now);
-  perf.frame(rawDt, { sim: t1 - t0, draw: performance.now() - t1, ticks, effects: renderer.effects.length, events: frameEvents.join(' ') });
+  perf.frame(rawDt, { sim: t1 - t0, draw: performance.now() - t1, ticks, effects: renderer.effects.length, events: frameEvents.join(' '), scale: renderer.scale });
   frameEvents.length = 0;
   // An online client sends a summary to the server each 10 seconds. The server writes it to its log.
   const summary = perf.takeSummary();
@@ -514,7 +523,7 @@ function savePerfLog() {
     saved: new Date().toISOString(), mode: conn ? (conn.local ? 'offline' : 'online') : 'menu',
     gpu: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'unknown',
     quality: params.get('quality') || settings.quality, renderSize: `${gl.drawingBufferWidth}x${gl.drawingBufferHeight}`,
-    window: `${innerWidth}x${innerHeight}`, pixelRatio: devicePixelRatio, browser: navigator.userAgent,
+    window: `${innerWidth}x${innerHeight}`, fullscreen: !!document.fullscreenElement, pixelRatio: devicePixelRatio, browser: navigator.userAgent,
     bots: conn && conn.local ? conn.host.bots.size : null, pingMs: Math.round(rtt),
   });
   const a = document.createElement('a');
@@ -561,7 +570,18 @@ function chatCommand(text) {
 }
 
 const chat = $('chatinput');
+// Starts or stops the fullscreen mode. The browser permits this only after a key or a click.
+function toggleFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(() => { /* The browser did not permit the fullscreen mode. */ });
+}
+$('fullscreen').addEventListener('click', toggleFullscreen);
+document.addEventListener('fullscreenchange', () => {
+  $('fullscreen').textContent = document.fullscreenElement ? 'Exit fullscreen (F)' : 'Fullscreen (F)';
+});
+
 input.onKey = (code) => {
+  if (code === 'KeyF') toggleFullscreen();
   if ((code === 'F1' || code === 'F2') && vote && conn) conn.send({ t: 'vote', v: code === 'F1' ? 1 : 0 });
   if (code === 'F3') { settings.perf = !settings.perf; $('perfon').checked = settings.perf; perf.setVisible(settings.perf); saveSettings(); }
   if (code === 'Enter' && joined && $('menu').hidden) {

@@ -28,7 +28,7 @@ export class Perf {
   }
 
   newWindow() {
-    return { at: performance.now(), frames: 0, slow: 0, max: 0, times: [] };
+    return { at: performance.now(), frames: 0, slow: 0, max: 0, times: [], shots: 0, effects: 0, paused: 0, scale: 1 };
   }
 
   setVisible(v) {
@@ -54,6 +54,11 @@ export class Perf {
 
     const w = this.win;
     w.frames++; w.times.push(dt);
+    // These values show if a window had a fight, and if the game was paused.
+    w.shots += (p.events.match(/shot|boom/g) || []).length;
+    if (p.effects > w.effects) w.effects = p.effects;
+    if (p.ticks === 0) w.paused++;
+    if (p.scale) w.scale = p.scale;
     if (dt > w.max) w.max = dt;
     const limit = this.slowLimit();
     if (dt > limit) {
@@ -64,7 +69,7 @@ export class Perf {
       this.log.push({
         time: +((performance.now() - this.started) / 1000).toFixed(2), frameMs: +dt.toFixed(1),
         simMs: +p.sim.toFixed(1), drawMs: +p.draw.toFixed(1), otherMs: +other.toFixed(1), cause,
-        ticks: p.ticks, effects: p.effects, events: p.events,
+        ticks: p.ticks, effects: p.effects, events: p.events, scale: p.scale,
       });
     }
     if (performance.now() - w.at >= 10000) this.closeWindow();
@@ -82,6 +87,7 @@ export class Perf {
       fps: Math.round(w.frames * 1000 / (performance.now() - w.at)),
       low: Math.round(1000 / (worst.reduce((a, b) => a + b, 0) / worst.length)),
       max: Math.round(w.max), slow: w.slow,
+      shots: w.shots, maxEffects: w.effects, pausedFrames: w.paused, scale: w.scale,
     };
     this.windows.push(s);
     if (this.windows.length > 180) this.windows.shift();

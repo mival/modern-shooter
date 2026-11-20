@@ -26,6 +26,15 @@ export const QUALITY = {
   high: { pixels: 4.2e6, bloom: true },
   native: { pixels: Infinity, bloom: true },
 };
+// The dynamic resolution: the renderer decreases the render scale when many frames are slow.
+// A frame longer than this time is slow, in milliseconds. A longer frame than the limit is a hitch, not a GPU load.
+const SLOW_FRAME_MS = 25, HITCH_MS = 200;
+// The renderer examines this number of frames at a time. It decreases the scale if this number of them are slow.
+const SCALE_WINDOW = 120, SCALE_SLOW_FRAMES = 8;
+// One step of the scale and its lower limit. The scale multiplies the width and the height.
+const SCALE_STEP = 0.15, SCALE_MIN = 0.6;
+// The renderer ignores this number of frames after a map load, because the first frames are always slow.
+const SCALE_WARM_FRAMES = 180;
 // The horizontal field of view at the full zoom for a 4:3 screen, in degrees.
 const ZOOM_FOV = 40;
 const UP = new THREE.Vector3(0, 1, 0);
@@ -105,6 +114,7 @@ export class Renderer {
     this.buildViewModel();
 
     this.quality = QUALITY[opts.quality] || QUALITY.medium;
+    this.scale = 1; this.scaleFrames = 0; this.scaleSlow = 0;
     this.composer = new EffectComposer(this.r);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     // The weapon in the hand has its own scene. The pass clears the depth first.
@@ -149,14 +159,43 @@ export class Renderer {
   }
 
   setQuality(name) {
-    this.quality = QUALITY[name] || QUALITY.medium;
+    const quality = QUALITY[name] || QUALITY.medium;
+    // A different quality level starts at the full scale. The same level keeps its scale.
+    if (quality !== this.quality || !this.qualitySet) {
+      this.scale = 1;
+      this.scaleFrames = -SCALE_WARM_FRAMES; this.scaleSlow = 0;
+    }
+    this.quality = quality; this.qualitySet = true;
     this.resize();
+  }
+
+  // Sets the render scale, for example to the value from the last game.
+  setScale(scale) {
+    this.scale = Number.isFinite(scale) ? Math.max(SCALE_MIN, Math.min(1, scale)) : 1;
+    this.resize();
+  }
+
+  // Records the time of one frame. Decreases the render scale when many frames in a window are slow.
+  // The scale does not increase again, thus it does not change back and forth during a game.
+  // Returns true if the scale changed.
+  adaptScale(frameMs) {
+    if (this.quality.pixels === Infinity) return false;
+    this.scaleFrames++;
+    if (this.scaleFrames <= 0) return false;
+    if (frameMs > SLOW_FRAME_MS && frameMs < HITCH_MS) this.scaleSlow++;
+    if (this.scaleFrames < SCALE_WINDOW) return false;
+    const slow = this.scaleSlow;
+    this.scaleFrames = 0; this.scaleSlow = 0;
+    if (slow < SCALE_SLOW_FRAMES || this.scale <= SCALE_MIN) return false;
+    this.scale = Math.max(SCALE_MIN, this.scale - SCALE_STEP);
+    this.resize();
+    return true;
   }
 
   resize() {
     const w = window.innerWidth, h = window.innerHeight;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const ratio = Math.min(dpr, Math.sqrt(this.quality.pixels / (w * h)));
+    const ratio = Math.min(dpr, Math.sqrt(this.quality.pixels / (w * h))) * (this.scale || 1);
     this.r.setPixelRatio(ratio);
     this.r.setSize(w, h, false);
     this.composer.setPixelRatio(ratio);
@@ -194,6 +233,7 @@ export class Renderer {
   // Removes the level of the old map and builds the level of the new map.
   loadMap(map, world) {
     this.map = map; this.world = world;
+    this.scaleFrames = -SCALE_WARM_FRAMES; this.scaleSlow = 0;
     if (this.level) {
       this.scene.remove(this.level);
       this.level.traverse((o) => {

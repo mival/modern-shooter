@@ -45,6 +45,7 @@ Open `http://localhost:27960` in a browser. Then select "Play offline" or "Conne
 | Left mouse button | Fire |
 | 1 to 7, mouse wheel | Select a weapon |
 | C, right mouse button | Zoom while you hold it |
+| F | Start or stop the fullscreen mode |
 | Tab | Show the scores |
 | Enter | Chat |
 | Esc | Open the menu |
@@ -107,6 +108,11 @@ Press F3, or set "Performance graph" in the menu, to show the frame time graph.
 
 The "Graphics" option in the menu limits the render resolution. The default is "Medium" (approximately 1080p).
 On a 4K screen with an integrated GPU, "Native resolution" can decrease the frame rate below 60.
+
+When many frames are slow during a game, the game decreases the render resolution in steps of 15 %, to a minimum of 60 %.
+A message in the chat shows each step. The game saves the resolution and uses it again at the next start.
+The resolution goes back to 100 % when you select a different quality level in the menu.
+"Native resolution" does not use this function.
 
 ## Dedicated server
 
